@@ -1,0 +1,16 @@
+<resources>
+    <declare-styleable name="PlayingView">
+        <attr name="minVerticalSpacing" format="float" />
+        <attr name="verticalSpacing" format="float" />
+        <attr name="minHorizontalSpacing" format="float" />
+        <attr name="horizontalSpacing" format="float" />
+        <attr name="cardBack" format="integer" />
+    </declare-styleable>
+
+    <declare-styleable name="ColumnView">
+        <attr name="spreadCardsHorizontally" format="boolean" />
+        <attr name="spreadFaceDownCards" format="boolean" />"
+        <attr name="spreadCardsLeftToRight" format="boolean" />"
+        <attr name="stackFaceUpCardsOnFaceDownCards" format="boolean" />"
+    </declare-styleable>
+</resources>
