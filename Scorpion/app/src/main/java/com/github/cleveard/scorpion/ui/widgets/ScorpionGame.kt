@@ -88,7 +88,7 @@ class ScorpionGame : Game, CardGroup.Actions {
             val twoRows = maxHeight > maxWidth
             val cols = if (twoRows) cards.lastIndex else cards.size
             val colWidth = maxWidth / cols
-            measurements.scale = (colWidth - padding * 2) / measurements.horizontalSpacing.size
+            measurements.scale = (colWidth - padding) / measurements.horizontalSpacing.size
 
             if (twoRows) {
                 CardGroup.Content(
@@ -96,7 +96,7 @@ class ScorpionGame : Game, CardGroup.Actions {
                     cards.lastIndex,
                     this@ScorpionGame,
                     modifier = Modifier
-                        .height(measurements.verticalSpacing.size * measurements.scale)
+                        .height(measurements.verticalSpacing.size * measurements.scale + padding)
                         .align(Alignment.TopEnd)
                         .padding(padding),
                     cardBackAssetName = { "red.svg" },
@@ -111,7 +111,7 @@ class ScorpionGame : Game, CardGroup.Actions {
                     .align(Alignment.TopStart)
                     .let {
                         if (twoRows)
-                            it.offset(y = measurements.verticalSpacing.size * measurements.scale + padding * 2.0f)
+                            it.offset(y = measurements.verticalSpacing.size * measurements.scale + padding)
                         else
                             it
                     }
