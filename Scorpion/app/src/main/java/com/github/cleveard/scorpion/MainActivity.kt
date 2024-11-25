@@ -4,6 +4,7 @@ import android.content.res.Configuration
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -14,45 +15,33 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.compose.ui.unit.Dp
 import com.github.cleveard.scorpion.ui.theme.ScorpionTheme
-import com.github.cleveard.scorpion.ui.widgets.ScorpionGame
 
-interface Game {
-    fun deal()
-
-    @Composable
-    fun Content(modifier: Modifier)
-}
-
-private val game = ScorpionGame()
 
 private val BAR_HEIGHT: Dp = Dp(0.3f * 160.0f)
 
 class MainActivity : ComponentActivity() {
+    private val viewModel by viewModels<MainActivityViewModel>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // enableEdgeToEdge()
         setContent {
-            ScorpionPreview()
+            ScorpionPreview(viewModel.game)
         }
     }
 }
 
-@PreviewScreenSizes()
+@PreviewScreenSizes
 @Composable
-fun ScorpionPreview() {
+fun ScorpionPreview(game: Game? = null) {
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     ScorpionTheme {
@@ -71,7 +60,7 @@ fun ScorpionPreview() {
                 ) {
                     ToolContent(true)
                 }
-                game.Content(Modifier.align(Alignment.TopStart)
+                game?.Content(Modifier.align(Alignment.TopStart)
                     .fillMaxHeight()
                     .width(maxWidth - BAR_HEIGHT)
                 )
@@ -85,7 +74,7 @@ fun ScorpionPreview() {
                 ) {
                     ToolContent(false)
                 }
-                game.Content(Modifier.align(Alignment.TopStart)
+                game?.Content(Modifier.align(Alignment.TopStart)
                     .height(maxHeight - BAR_HEIGHT)
                     .fillMaxWidth()
                 )
