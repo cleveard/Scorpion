@@ -85,7 +85,7 @@ class ScorpionGame : Game, CardGroup.Actions {
                 .fillMaxWidth()
                 .fillMaxHeight()
         ) {
-            val twoRows = true // maxHeight > maxWidth
+            val twoRows = maxHeight > maxWidth
             val cols = if (twoRows) cards.lastIndex else cards.size
             val colWidth = maxWidth / cols
             measurements.scale = (colWidth - padding * 2) / measurements.horizontalSpacing.size
@@ -109,7 +109,12 @@ class ScorpionGame : Game, CardGroup.Actions {
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.TopStart)
-                    .offset(y = measurements.verticalSpacing.size * measurements.scale + padding * 2.0f)
+                    .let {
+                        if (twoRows)
+                            it.offset(y = measurements.verticalSpacing.size * measurements.scale + padding * 2.0f)
+                        else
+                            it
+                    }
             ) {
                 for (col in cards.indices) {
                     if (col < cards.lastIndex || !twoRows) {

@@ -1,20 +1,30 @@
 package com.github.cleveard.scorpion
 
+import android.content.res.Configuration
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.BottomAppBar
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.tooling.preview.PreviewScreenSizes
+import androidx.compose.ui.unit.Dp
 import com.github.cleveard.scorpion.ui.theme.ScorpionTheme
 import com.github.cleveard.scorpion.ui.widgets.ScorpionGame
 
@@ -27,6 +37,8 @@ interface Game {
 
 private val game = ScorpionGame()
 
+private val BAR_HEIGHT: Dp = Dp(0.3f * 160.0f)
+
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -38,26 +50,50 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@Preview(showBackground = true)
+@PreviewScreenSizes()
 @Composable
 fun ScorpionPreview() {
+    val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+
     ScorpionTheme {
-        Scaffold(
-            bottomBar = {
-                BottomAppBar(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.primary,
+        BoxWithConstraints(
+            modifier = Modifier.fillMaxWidth()
+                .fillMaxHeight()
+                .background(Color(0xff277714))
+        ) {
+            if (landscape) {
+                Column(
+                    modifier = Modifier.align(Alignment.TopEnd)
+                        .fillMaxHeight()
+                        .width(BAR_HEIGHT)
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    verticalArrangement = Arrangement.SpaceEvenly
                 ) {
-                    Text(
-                        modifier = Modifier
-                            .fillMaxWidth(),
-                        textAlign = TextAlign.Center,
-                        text = "Bottom app bar",
-                    )
+                    ToolContent(true)
                 }
+                game.Content(Modifier.align(Alignment.TopStart)
+                    .fillMaxHeight()
+                    .width(maxWidth - BAR_HEIGHT)
+                )
+            } else {
+                Row(
+                    modifier = Modifier.align(Alignment.BottomStart)
+                        .fillMaxWidth()
+                        .height(BAR_HEIGHT)
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    ToolContent(false)
+                }
+                game.Content(Modifier.align(Alignment.TopStart)
+                    .height(maxHeight - BAR_HEIGHT)
+                    .fillMaxWidth()
+                )
             }
-        ) { padding ->
-            game.Content(Modifier.padding(padding))
         }
     }
+}
+
+@Composable
+fun ToolContent(landscape: Boolean) {
 }
