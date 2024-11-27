@@ -32,6 +32,9 @@ class LayoutMeasurements {
         var spacing: Dp = calcSpacing()
             private set
 
+        fun spaceBy(): Dp {
+            return spacing - size * scale
+        }
         fun calcSpacing(): Dp = (size * scale * ratio).coerceAtLeast(minimum).also { spacing = it }
     }
 }

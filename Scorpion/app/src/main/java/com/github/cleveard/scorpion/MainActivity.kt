@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.compose.ui.unit.Dp
+import com.github.cleveard.scorpion.ui.Game
 import com.github.cleveard.scorpion.ui.theme.ScorpionTheme
 
 

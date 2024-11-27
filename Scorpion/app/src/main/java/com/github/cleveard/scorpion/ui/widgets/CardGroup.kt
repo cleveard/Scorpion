@@ -10,25 +10,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.BlendMode
-import androidx.compose.ui.graphics.BlendModeColorFilter
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import coil3.compose.AsyncImage
+import com.github.cleveard.scorpion.db.CardEntity
+import com.github.cleveard.scorpion.ui.Game
 
 /**
  * TODO: document your custom view class.
  */
 object CardGroup {
-    /** Mask to extract card number from */
-    const val CARD_MASK = 0xff
-    const val SELECTED = 0x10000
-    const val ONE_HIGHER = 0x20000
-    const val ONE_LOWER = 0x40000
-    const val FACE_DOWN = 0x80000
-
     private const val ASSET_PATH = "file:///android_asset/"
     private const val FRONT_ASSET_PATH = ASSET_PATH + "cards/fronts/"
     private const val BACK_ASSET_PATH = ASSET_PATH + "cards/backs/"
@@ -89,65 +82,23 @@ object CardGroup {
         "diamonds_king.svg",
     )
 
-    private var normalFilter: BlendModeColorFilter = BlendModeColorFilter(Color(0x00000000), BlendMode.Dst)
-    private var selectionFilter: BlendModeColorFilter = BlendModeColorFilter(Color(0xFFA0A0A0), BlendMode.Multiply)
-    private var higherFilter: BlendModeColorFilter = BlendModeColorFilter(Color(0xFFFFA0A0), BlendMode.Multiply)
-    private var lowerFilter: BlendModeColorFilter = BlendModeColorFilter(Color(0xFFA0FFA0), BlendMode.Multiply)
-
     @Composable
-    fun Content(
-        cards: MutableList<SnapshotStateList<Int>>,
-        col: Int,
-        actions: Actions?,
+    fun ColumnContent(
+        cards: SnapshotStateList<CardEntity>,
+        game: Game,
         modifier: Modifier = Modifier,
-        cardBackAssetName: () -> String = { "red.svg" },
-        measurements: LayoutMeasurements = LayoutMeasurements(),
-        spreadCardsHorizontally: () -> Boolean = { false },
-        spreadFaceDownCards: () -> Boolean = { true },
-        spreadCardsRightToLeft: () -> Boolean = { true },
-        stackFaceUpCardsOnFaceDownCards: () -> Boolean = { false }
     ) {
-        val layoutDir = LocalLayoutDirection.current.let {
-            if (spreadCardsHorizontally() && spreadCardsRightToLeft()) {
-                if (it == LayoutDirection.Ltr)
-                    LayoutDirection.Rtl
-                else
-                    LayoutDirection.Ltr
-            } else
-                it
-        }
-
-        CompositionLocalProvider(LocalLayoutDirection provides layoutDir) {
-            if (spreadCardsHorizontally()) {
-                Row(
-                    modifier = modifier,
-                    horizontalArrangement = Arrangement.spacedBy(
-                        measurements.horizontalSpacing.spacing - measurements.horizontalSpacing.size * measurements.scale
-                    )
-                ) {
-                    FillImages(
-                        cards,
-                        col,
-                        actions,
-                        cardBackAssetName,
-                        spreadFaceDownCards,
-                        stackFaceUpCardsOnFaceDownCards
-                    )
-                }
-            } else {
-                Column(
-                    modifier = modifier,
-                    verticalArrangement = Arrangement.spacedBy(
-                        measurements.verticalSpacing.spacing - measurements.verticalSpacing.size * measurements.scale
-                    )
-                ) {
-                    FillImages(
-                        cards,
-                        col,
-                        actions,
-                        cardBackAssetName,
-                        spreadFaceDownCards,
-                        stackFaceUpCardsOnFaceDownCards
+        Column(
+            modifier = modifier,
+            verticalArrangement = Arrangement.spacedBy(
+                game.measurements.verticalSpacing.spaceBy()
+            )
+        ) {
+            for (card in cards) {
+                if (card.spread) {
+                    GetImage(
+                        card,
+                        game
                     )
                 }
             }
@@ -155,42 +106,26 @@ object CardGroup {
     }
 
     @Composable
-    fun FillImages(
-        cards: List<MutableList<Int>>,
-        col: Int,
-        actions: Actions?,
-        cardBackAssetName: () -> String = { "red.svg" },
-        spreadFaceDownCards: () -> Boolean = { true },
-        stackFaceUpCardsOnFaceDownCards: () -> Boolean = { false }
-    )
-    {
-        val list = cards[col]
-        if (list.isNotEmpty()) {
-            val firstFront = frontStart(list)
-            var start = if (stackFaceUpCardsOnFaceDownCards() && firstFront < list.size)
-                firstFront
-            else if (spreadFaceDownCards() || firstFront == 0)
-                0
-            else {
-                GetImage(
-                    cards,
-                    col,
-                    firstFront - 1,
-                    actions,
-                    cardBackAssetName()
+    fun RowContent(
+        cards: SnapshotStateList<CardEntity>,
+        game: Game,
+        modifier: Modifier = Modifier
+    ) {
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            Row(
+                modifier = modifier,
+                horizontalArrangement = Arrangement.spacedBy(
+                    game.measurements.horizontalSpacing.spaceBy()
                 )
-                firstFront
-            }
-
-            while (start < list.size) {
-                GetImage(
-                    cards,
-                    col,
-                    start,
-                    actions,
-                    cardBackAssetName()
-                )
-                ++start
+            ) {
+                for (card in cards) {
+                    if (card.spread || card.position == cards.lastIndex) {
+                        GetImage(
+                            card,
+                            game
+                        )
+                    }
+                }
             }
         }
     }
@@ -198,33 +133,24 @@ object CardGroup {
     @OptIn(ExperimentalFoundationApi::class)
     @Composable
     private fun GetImage(
-        list: List<MutableList<Int>>,
-        col: Int,
-        row: Int,
-        actions: Actions?,
-        cardBackAssetName: String,
+        card: CardEntity,
+        game: Game,
         modifier: Modifier = Modifier
     ) {
-        val card = list[col][row]
-        var filter = normalFilter
-        val resourcePath = if ((card and FACE_DOWN) != 0)
-            BACK_ASSET_PATH + cardBackAssetName
+        var filter: ColorFilter? = null
+        val resourcePath = if (card.faceDown)
+            BACK_ASSET_PATH + game.cardBackAssetName
         else {
-            filter = when {
-                (card and SELECTED) != 0 -> selectionFilter
-                (card and ONE_HIGHER) != 0 -> higherFilter
-                (card and ONE_LOWER) != 0 -> lowerFilter
-                else -> normalFilter
-            }
-            FRONT_ASSET_PATH + frontIds[card and CARD_MASK]
+            filter = game.getFilter(card.highlight)
+            FRONT_ASSET_PATH + frontIds[card.value]
         }
         var combinedModifier = modifier
-        if (actions?.isClickable(list, col, row) == true)
+        if (game.isClickable(card))
             combinedModifier = combinedModifier.combinedClickable(
-                onClick = { actions.onClick(list, col, row) },
-                onDoubleClick = { actions.onDoubleClick(list, col, row) }
+                onClick = { game.onClick(card) },
+                onDoubleClick = { game.onDoubleClick(card) }
             )
-        Box() {
+        Box {
             AsyncImage(
                 resourcePath,
                 contentDescription = "",
@@ -233,20 +159,5 @@ object CardGroup {
                 colorFilter = filter,
             )
         }
-    }
-
-    private fun frontStart(list: List<Int>): Int {
-        return list.indexOfFirst { (it and FACE_DOWN) == 0 }.let {
-            if (it < 0)
-                list.size
-            else
-                it
-        }
-    }
-
-    interface Actions {
-        fun isClickable(list: List<MutableList<Int>>, col: Int, row: Int): Boolean
-        fun onClick(list: List<MutableList<Int>>, col: Int, row: Int)
-        fun onDoubleClick(list: List<MutableList<Int>>, col: Int, row: Int)
     }
 }

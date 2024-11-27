@@ -9,69 +9,94 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.BlendModeColorFilter
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.github.cleveard.scorpion.Game
+import com.github.cleveard.scorpion.db.CardEntity
+import com.github.cleveard.scorpion.ui.Actions
+import com.github.cleveard.scorpion.ui.Dealer
+import com.github.cleveard.scorpion.ui.Game
 
-class ScorpionGame : Game, CardGroup.Actions {
+class ScorpionGame(private val dealer: Dealer) : Game, Actions {
     private val cardLayout: CardLayout = CardLayout()
     private val padding: Dp = Dp(2.0f)
 
-    private val cards: MutableList<SnapshotStateList<Int>> = mutableListOf<SnapshotStateList<Int>>().apply {
-        repeat(cardLayout.COLUMN_COUNT + 1) {
+    private val cards: MutableList<SnapshotStateList<CardEntity>> = mutableListOf<SnapshotStateList<CardEntity>>().apply {
+        repeat(COLUMN_COUNT + 1) {
             add(mutableStateListOf())
         }
     }
-    private val places: List<ColumnRow> = List(cardLayout.CARD_COUNT) { ColumnRow() }
 
-    private val measurements: LayoutMeasurements = LayoutMeasurements().apply {
+    override val measurements: LayoutMeasurements = LayoutMeasurements().apply {
         verticalSpacing.minimum = Dp(0.3f * 160.0f)
         verticalSpacing.ratio = 0.15f
         horizontalSpacing.minimum = Dp(0.3f * 160.0f)
         horizontalSpacing.ratio = 0.15f
     }
-
-    private val noMoves = mutableStateOf( false )
-    private var highlighted = mutableListOf<Pair<Int, Int>>()
+    private val cardBack: MutableState<String> = mutableStateOf("red.svg")
+    override val cardBackAssetName: String
+        get() = cardBack.value
+    private var highlighted = mutableListOf<CardEntity>()
 
     init {
         deal()
     }
 
     override fun deal() {
-        val shuffled = IntArray(cardLayout.CARD_COUNT) { it }.let {
-            it.shuffle()
-            it.toList()
-        }
+        val shuffled = dealer.shuffle()
 
         for (c in cards)
             c.clear()
 
-        var col = 0
-        var row = 0
-        var list: SnapshotStateList<Int> = cards[0]
-        for (card in shuffled) {
-            if (row >= cardLayout.CARDS_PER_COLUMN) {
-                list = cards[++col]
-                row = 0
+        val iterator = shuffled.iterator()
+        for (group in 0 until COLUMN_COUNT) {
+            for (position in 0 until CARDS_PER_COLUMN) {
+                val card = iterator.next()
+                card.group = group
+                card.position = position
+                card.faceDown = group < cardLayout.hiddenCardColumnCount && position < CARDS_FACE_DOWN
+                card.spread = true
             }
-            places[card].let {
-                it.col = col
-                it.row = row
+        }
+        var position = 0
+        while (iterator.hasNext()) {
+            val card = iterator.next()
+            card.group = COLUMN_COUNT
+            card.position = position++
+            card.faceDown = true
+            card.spread = false
+        }
+
+        restart(shuffled)
+    }
+
+    override fun restart(cardList: List<CardEntity>) {
+        val iterator = cardList.sortedWith(compareBy({ it. group }, { it.position })).iterator()
+        for (group in 0 until COLUMN_COUNT) {
+            val list = cards[group].apply { clear() }
+            for (position in 0 until CARDS_PER_COLUMN) {
+                val card = iterator.next()
+                card.group = group
+                card.position = position
+                list.add(card)
             }
-            list.add(
-                if ((col < cardLayout.hiddenCardColumnCount || col >= cardLayout.COLUMN_COUNT) &&
-                    row < cardLayout.CARDS_FACE_DOWN)
-                    card or CardGroup.FACE_DOWN
-                else
-                    card
-            )
-            ++row
+        }
+        var position = 0
+        val list = cards[COLUMN_COUNT].apply { clear() }
+        while (iterator.hasNext()) {
+            val card = iterator.next()
+            card.group = COLUMN_COUNT
+            card.position = position++
+            list.add(card)
         }
     }
 
@@ -86,22 +111,18 @@ class ScorpionGame : Game, CardGroup.Actions {
                 .fillMaxHeight()
         ) {
             val twoRows = maxHeight > maxWidth
-            val cols = if (twoRows) cards.lastIndex else cards.size
+            val cols = if (twoRows) cards.size - 1 else cards.size
             val colWidth = maxWidth / cols
             measurements.scale = (colWidth - padding) / measurements.horizontalSpacing.size
 
             if (twoRows) {
-                CardGroup.Content(
-                    cards,
-                    cards.lastIndex,
+                CardGroup.RowContent(
+                    cards[cards.kitty],
                     this@ScorpionGame,
                     modifier = Modifier
                         .height(measurements.verticalSpacing.size * measurements.scale + padding)
                         .align(Alignment.TopEnd)
-                        .padding(padding),
-                    cardBackAssetName = { "red.svg" },
-                    spreadCardsHorizontally = { true },
-                    spreadFaceDownCards = { noMoves.value }
+                        .padding(padding)
                 )
             }
 
@@ -116,25 +137,15 @@ class ScorpionGame : Game, CardGroup.Actions {
                             it
                     }
             ) {
-                for (col in cards.indices) {
-                    if (col < cards.lastIndex || !twoRows) {
-                        CardGroup.Content(
-                            cards,
-                            col,
+                for (group in cards.indices) {
+                    if (group != cards.kitty || !twoRows) {
+                        CardGroup.ColumnContent(
+                            cards[group],
                             this@ScorpionGame,
                             modifier = Modifier
                                 .width(colWidth)
                                 .align(Alignment.Top)
-                                .padding(padding),
-                            cardBackAssetName = { "red.svg" },
-                            measurements = measurements,
-                            spreadCardsHorizontally = { false },
-                            spreadFaceDownCards = {
-                                if (col == cards.lastIndex)
-                                    noMoves.value
-                                else
-                                    true
-                            }
+                                .padding(padding)
                         )
                     }
                 }
@@ -142,173 +153,173 @@ class ScorpionGame : Game, CardGroup.Actions {
         }
     }
 
-    override fun isClickable(list: List<MutableList<Int>>, col: Int, row: Int): Boolean {
-        val card = list[col][row]
+    override fun getFilter(highlight: Int): ColorFilter? {
+        return filters[highlight]
+    }
+
+    override fun isClickable(card: CardEntity): Boolean {
         return when {
-            (card and CardGroup.FACE_DOWN) != 0 -> {
-                if (col == list.lastIndex)
-                    noMoves.value && row == list[col].lastIndex
+            card.faceDown -> {
+                if (card.group == cards.kitty)
+                    card.spread
                 else
-                    row == list[col].lastIndex
+                    card.position == cards[card.group].lastIndex
             }
             else -> true
         }
     }
 
-    override fun onClick(list: List<MutableList<Int>>, col: Int, row: Int) {
-        if (isClickable(list, col, row)) {
-            val card = list[col][row]
+    override fun onClick(card: CardEntity) {
+        if (isClickable(card)) {
+            val flags = card.flags.value and CardEntity.HIGHLIGHT_MASK
             clearHighlights()
-            if ((card and CardGroup.FACE_DOWN) != 0)
-                list[col][row] = card and CardGroup.FACE_DOWN.inv()
-            else if ((card and CardGroup.ONE_LOWER) != 0) {
-                checkAndMove(list, col, row)
-            } else if ((card and CardGroup.SELECTED) == 0) {
-                highlight(list, col, row, CardGroup.SELECTED)
-                findOneLower(card)?.let {
-                    highlight(list, it.second, it.third, CardGroup.ONE_LOWER)
+            if (card.faceDown)
+                card.faceDown = false
+            else if (flags == HIGHLIGHT_ONE_LOWER) {
+                checkAndMove(card)
+            } else if (flags != HIGHLIGHT_SELECTED) {
+                highlight(card, HIGHLIGHT_SELECTED)
+                findOneLower(card.value)?.let {
+                    highlight(it, HIGHLIGHT_ONE_LOWER)
                 }
-                findOneHigher(card)?.let {
-                    highlight(list, it.second, it.third, CardGroup.ONE_HIGHER)
+                findOneHigher(card.value)?.let {
+                    highlight(it, HIGHLIGHT_ONE_HIGHER)
                 }
             }
         }
     }
 
-    override fun onDoubleClick(list: List<MutableList<Int>>, col: Int, row: Int) {
-        checkAndMove(list, col, row)
+    override fun onDoubleClick(card: CardEntity) {
+        clearHighlights()
+        checkAndMove(card)
     }
 
-    private fun checkAndMove(list: List<MutableList<Int>>, col: Int, row: Int) {
-        val card = list[col][row] and CardGroup.CARD_MASK
-        if (card % cardLayout.CARDS_PER_SUIT == 12) {
-            for (empty in 0 until list.lastIndex) {
-                if (list[empty].isEmpty()) {
-                    if (cardLayout.kingMovesAlone) {
-                        places[card].let {
-                            it.col = empty
-                            it.row = 0
-                        }
-                        list[empty].add(list[col][row])
-                        list[col].removeAt(row)
-                    } else
-                        moveCards(list, col, row, empty)
+    private fun checkAndMove(card: CardEntity) {
+        if (card.value % Game.CARDS_PER_SUIT == Game.CARDS_PER_SUIT - 1) {
+            for (empty in 0 until cards.lastIndex) {
+                if (cards[empty].isEmpty()) {
+                    moveCards(card, empty, true)
+                    break
                 }
             }
         } else
-            findOneHigher(card)?.let {
-                val to = list[it.second]
-                val c = to[it.third]
-                if (it.second != col && it.third == to.lastIndex && (c and CardGroup.FACE_DOWN) == 0) {
-                    moveCards(list, col, row, it.second)
+            findOneHigher(card.value)?.let {
+                val to = cards[it.group]
+                val c = to[it.position]
+                if (it.group != card.group && it.position == to.lastIndex && c.faceUp) {
+                    moveCards(card, it.group, card.group == cards.kitty)
                 }
             }
     }
 
-    private fun findCard(inCard: Int): Triple<Int, Int, Int> {
-        return places[inCard and CardGroup.CARD_MASK].let {
-            Triple(cards[it.col][it.row], it.col, it.row)
-        }
-    }
-
-    private fun findOneLower(inCard: Int): Triple<Int, Int, Int>? {
-        val card = inCard and CardGroup.CARD_MASK
-        val value = card % cardLayout.CARDS_PER_SUIT
-        return if (value != 0)
-            findCard(card - 1)
-        else
-            null
-    }
-
-    private fun findOneHigher(inCard: Int): Triple<Int, Int, Int>? {
-        val card = inCard and CardGroup.CARD_MASK
-        val value = card % cardLayout.CARDS_PER_SUIT
-        return if (value != cardLayout.CARDS_PER_SUIT - 1)
-            findCard(card + 1)
-        else
-            null
-    }
-
     private fun clearHighlights() {
-        for (c in highlighted) {
-            val card = cards[c.first][c.second] and
-                CardGroup.SELECTED.inv() and
-                CardGroup.ONE_LOWER.inv() and
-                CardGroup.ONE_HIGHER.inv()
-            cards[c.first][c.second] = card
-        }
+        for (c in highlighted)
+            c.highlight = 0
         highlighted.clear()
     }
 
     private fun calcNoMoves(): Boolean {
-        for (col in cards.indices) {
-            val c = cards[col]
-            if (c.isNotEmpty()) {
-                val card = c.last()
-                if ((card and CardGroup.FACE_DOWN) != 0) {
-                    return col == cards.lastIndex
-                }
-                findOneLower(card)?.let {
-                    if ((it.first and CardGroup.FACE_DOWN) == 0 && it.second != col)
-                        return@calcNoMoves false
+        for (group in cards.indices) {
+            if (group != cards.kitty) {
+                val c = cards[group]
+                if (c.isNotEmpty()) {
+                    val card = c.last()
+                    if (card.faceDown)
+                        return false
+                    findOneLower(card.value)?.let {
+                        if (it.faceUp && it.group != group)
+                            return@calcNoMoves false
+                    }
                 }
             }
+        }
+
+        for (card in cards[cards.kitty]) {
+            if (card.faceDown && card.spread)
+                return false
         }
         return true
     }
 
-    private fun highlight(list: List<MutableList<Int>>, col: Int, row: Int, flag: Int) {
-        val c = list[col][row]
-        if ((c and CardGroup.FACE_DOWN) == 0) {
-            list[col][row] = c or flag
-            highlighted.add(Pair(col, row))
+    private fun highlight(card: CardEntity, highlight: Int) {
+        if (card.faceUp) {
+            card.highlight = highlight
+            highlighted.add(card)
         }
     }
 
-    private fun moveCards(list: List<MutableList<Int>>, fromCol: Int, row: Int, toCol: Int) {
-        if (fromCol == toCol)
+    private fun moveCards(card: CardEntity, toGroup: Int, single: Boolean) {
+        if (card.group == toGroup)
             throw IllegalArgumentException("Can only move between different columns")
-        val from = list[fromCol]
-        val to = list[toCol]
-        for (i in row until from.size) {
+        val from = cards[card.group]
+        val to = cards[toGroup]
+        val range = if (single)
+            card.position..card.position
+        else
+            card.position until from.size
+        for (i in range) {
             val c = from[i]
-            if ((c and CardGroup.FACE_DOWN) == 0) {
-                places[c and CardGroup.CARD_MASK].let {
-                    it.col = toCol
-                    it.row = to.size
-                }
-                to.add(c and CardGroup.CARD_MASK)
-            }
+            c.group = toGroup
+            c.position = to.size
+            to.add(c)
         }
 
-        var i = row
-        while (i < from.size) {
-            val c = from[i]
-            if ((c and CardGroup.FACE_DOWN) == 0)
-                from.removeAt(i)
-            else {
-                places[c and CardGroup.CARD_MASK].row = i++
-            }
+        for (i in range.reversed()) {
+            from.removeAt(i)
         }
 
-        noMoves.value = calcNoMoves()
+        for (i in range.first until from.size)
+            from[i].position = i
+
+        if (calcNoMoves())
+            spreadKitty()
     }
 
-    data class ColumnRow(var col: Int = 0, var row: Int = 0)
+    private fun findOneLower(cardValue: Int): CardEntity? {
+        val value = cardValue % Game.CARDS_PER_SUIT
+        return if (value != 0)
+            dealer.findCard(cardValue - 1)
+        else
+            null
+    }
 
-    @Suppress("PropertyName")
+    private fun findOneHigher(cardValue: Int): CardEntity? {
+        val value = cardValue % Game.CARDS_PER_SUIT
+        return if (value != Game.CARDS_PER_SUIT - 1)
+            dealer.findCard(cardValue + 1)
+        else
+            null
+    }
+
+    private fun spreadKitty() {
+        val kitty = cards[cards.kitty]
+        for (card in kitty)
+            card.spread = true
+    }
+
+    data class CardLayout(
+        var hiddenCardColumnCount: Int = 3,
+        var kingMovesAlone: Boolean = true,
+        var undoCanUndoReveal: Boolean = false
+    )
+
     companion object {
-        class CardLayout(
-            val CARDS_PER_SUIT: Int = 13,
-            val SUIT_COUNT: Int = 4,
-            val CARD_COUNT: Int = CARDS_PER_SUIT * SUIT_COUNT,
-            val COLUMN_COUNT: Int = 7,
-            val CARDS_PER_COLUMN: Int = 7,
-            val CARDS_FACE_DOWN: Int = 3,
-            var hiddenCardColumnCount: Int = 3,
-            var kingMovesAlone: Boolean = true,
-            var undoCanUndoReveal: Boolean = false
-        )
+        const val COLUMN_COUNT: Int = 7
+        const val CARDS_PER_COLUMN: Int = 7
+        const val CARDS_FACE_DOWN: Int = 3
 
+        const val HIGHLIGHT_SELECTED: Int  = 1
+        const val HIGHLIGHT_ONE_LOWER: Int  = 2
+        const val HIGHLIGHT_ONE_HIGHER: Int  = 3
+
+        val List<List<CardEntity>>.kitty: Int
+            get() = lastIndex
+
+        val filters: List<ColorFilter?> = listOf(
+            null,
+            BlendModeColorFilter(Color(0xFFA0A0A0), BlendMode.Multiply),
+            BlendModeColorFilter(Color(0xFFA0FFA0), BlendMode.Multiply),
+            BlendModeColorFilter(Color(0xFFFFA0A0), BlendMode.Multiply)
+        )
     }
 }
