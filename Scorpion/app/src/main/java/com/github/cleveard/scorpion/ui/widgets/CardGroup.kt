@@ -15,7 +15,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import coil3.compose.AsyncImage
-import com.github.cleveard.scorpion.db.CardEntity
+import com.github.cleveard.scorpion.db.Card
 import com.github.cleveard.scorpion.ui.Game
 
 /**
@@ -84,7 +84,7 @@ object CardGroup {
 
     @Composable
     fun ColumnContent(
-        cards: SnapshotStateList<CardEntity>,
+        cards: SnapshotStateList<Card>,
         game: Game,
         modifier: Modifier = Modifier,
     ) {
@@ -107,7 +107,7 @@ object CardGroup {
 
     @Composable
     fun RowContent(
-        cards: SnapshotStateList<CardEntity>,
+        cards: SnapshotStateList<Card>,
         game: Game,
         modifier: Modifier = Modifier
     ) {
@@ -133,7 +133,7 @@ object CardGroup {
     @OptIn(ExperimentalFoundationApi::class)
     @Composable
     private fun GetImage(
-        card: CardEntity,
+        card: Card,
         game: Game,
         modifier: Modifier = Modifier
     ) {

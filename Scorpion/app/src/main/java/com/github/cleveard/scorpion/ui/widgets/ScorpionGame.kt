@@ -21,16 +21,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.github.cleveard.scorpion.db.CardEntity
-import com.github.cleveard.scorpion.ui.Actions
+import com.github.cleveard.scorpion.db.Card
+import com.github.cleveard.scorpion.db.State
 import com.github.cleveard.scorpion.ui.Dealer
 import com.github.cleveard.scorpion.ui.Game
+import kotlinx.coroutines.launch
 
-class ScorpionGame(private val dealer: Dealer) : Game, Actions {
+class ScorpionGame(private val dealer: Dealer) : Game {
     private val cardLayout: CardLayout = CardLayout()
     private val padding: Dp = Dp(2.0f)
 
-    private val cards: MutableList<SnapshotStateList<CardEntity>> = mutableListOf<SnapshotStateList<CardEntity>>().apply {
+    private val cards: MutableList<SnapshotStateList<Card>> = mutableListOf<SnapshotStateList<Card>>().apply {
         repeat(COLUMN_COUNT + 1) {
             add(mutableStateListOf())
         }
@@ -45,15 +46,9 @@ class ScorpionGame(private val dealer: Dealer) : Game, Actions {
     private val cardBack: MutableState<String> = mutableStateOf("red.svg")
     override val cardBackAssetName: String
         get() = cardBack.value
-    private var highlighted = mutableListOf<CardEntity>()
+    private var highlighted = mutableListOf<Card>()
 
-    init {
-        deal()
-    }
-
-    override fun deal() {
-        val shuffled = dealer.shuffle()
-
+    override suspend fun deal(shuffled: List<Card>): State {
         for (c in cards)
             c.clear()
 
@@ -65,6 +60,7 @@ class ScorpionGame(private val dealer: Dealer) : Game, Actions {
                 card.position = position
                 card.faceDown = group < cardLayout.hiddenCardColumnCount && position < CARDS_FACE_DOWN
                 card.spread = true
+                card.highlight = Card.HIGHLIGHT_NONE
             }
         }
         var position = 0
@@ -76,27 +72,41 @@ class ScorpionGame(private val dealer: Dealer) : Game, Actions {
             card.spread = false
         }
 
-        restart(shuffled)
+        setCards(shuffled)
+
+        return State(0L, ScorpionGame::class.qualifiedName!!)
     }
 
-    override fun restart(cardList: List<CardEntity>) {
-        val iterator = cardList.sortedWith(compareBy({ it. group }, { it.position })).iterator()
-        for (group in 0 until COLUMN_COUNT) {
-            val list = cards[group].apply { clear() }
-            for (position in 0 until CARDS_PER_COLUMN) {
-                val card = iterator.next()
-                card.group = group
-                card.position = position
-                list.add(card)
-            }
+    override fun setCards(cardList: List<Card>) {
+        val oldList: MutableList<Card> = mutableListOf()
+        for (card in cardList.sortedWith(compareBy({ it.group }, { it.position }))) {
+            val old = dealer.findCard(card.value)
+            if (old === card)
+                throw IllegalArgumentException("Cannot update existing cards")
+            oldList.add(old)
+
+            val to = cards[card.group]
+            if (card.position > to.size)
+                throw IllegalArgumentException("Position out of range")
+            if (card.position < to.size)
+                to[card.position] = card
+            else
+                to.add(card)
+            if (card.highlight != Card.HIGHLIGHT_NONE)
+                highlighted.add(card)
         }
-        var position = 0
-        val list = cards[COLUMN_COUNT].apply { clear() }
-        while (iterator.hasNext()) {
-            val card = iterator.next()
-            card.group = COLUMN_COUNT
-            card.position = position++
-            list.add(card)
+
+        oldList.sortWith(compareBy({ it.group }, { -it.position }))
+        for (card in oldList) {
+            if (card.highlight != Card.HIGHLIGHT_NONE)
+                highlighted.remove(card)
+            val to = cards[card.group]
+            if (card.position < to.size && to[card.position] === card) {
+                if (card.position == to.lastIndex)
+                    to.removeAt(card.position)
+                else
+                    throw IllegalArgumentException("Card mispositioned")
+            }
         }
     }
 
@@ -157,7 +167,7 @@ class ScorpionGame(private val dealer: Dealer) : Game, Actions {
         return filters[highlight]
     }
 
-    override fun isClickable(card: CardEntity): Boolean {
+    override fun isClickable(card: Card): Boolean {
         return when {
             card.faceDown -> {
                 if (card.group == cards.kitty)
@@ -169,32 +179,44 @@ class ScorpionGame(private val dealer: Dealer) : Game, Actions {
         }
     }
 
-    override fun onClick(card: CardEntity) {
+    override fun onClick(card: Card) {
         if (isClickable(card)) {
-            val flags = card.flags.value and CardEntity.HIGHLIGHT_MASK
-            clearHighlights()
-            if (card.faceDown)
-                card.faceDown = false
-            else if (flags == HIGHLIGHT_ONE_LOWER) {
-                checkAndMove(card)
-            } else if (flags != HIGHLIGHT_SELECTED) {
-                highlight(card, HIGHLIGHT_SELECTED)
-                findOneLower(card.value)?.let {
-                    highlight(it, HIGHLIGHT_ONE_LOWER)
-                }
-                findOneHigher(card.value)?.let {
-                    highlight(it, HIGHLIGHT_ONE_HIGHER)
+            withUndo {
+                val flags = card.flags.value and Card.HIGHLIGHT_MASK
+                clearHighlights()
+                if (card.faceDown) {
+                    card.faceDown = false
+                    dealer.cardChanged(card)
+                } else if (flags == HIGHLIGHT_ONE_LOWER) {
+                    checkAndMove(card)
+                } else if (flags != HIGHLIGHT_SELECTED) {
+                    highlight(card, HIGHLIGHT_SELECTED)
+                    findOneLower(card.value)?.let {
+                        highlight(it, HIGHLIGHT_ONE_LOWER)
+                    }
+                    findOneHigher(card.value)?.let {
+                        highlight(it, HIGHLIGHT_ONE_HIGHER)
+                    }
                 }
             }
         }
     }
 
-    override fun onDoubleClick(card: CardEntity) {
-        clearHighlights()
-        checkAndMove(card)
+    override fun onDoubleClick(card: Card) {
+        withUndo {
+            clearHighlights()
+            checkAndMove(card)
+        }
     }
 
-    private fun checkAndMove(card: CardEntity) {
+    private fun withUndo(actions: suspend () -> Unit) {
+        dealer.scope.launch {
+            dealer.withUndo(this::class.qualifiedName!!) {
+                actions()
+            }
+        }
+    }
+    private fun checkAndMove(card: Card) {
         if (card.value % Game.CARDS_PER_SUIT == Game.CARDS_PER_SUIT - 1) {
             for (empty in 0 until cards.lastIndex) {
                 if (cards[empty].isEmpty()) {
@@ -213,8 +235,10 @@ class ScorpionGame(private val dealer: Dealer) : Game, Actions {
     }
 
     private fun clearHighlights() {
-        for (c in highlighted)
+        for (c in highlighted) {
             c.highlight = 0
+            dealer.cardChanged(c)
+        }
         highlighted.clear()
     }
 
@@ -241,14 +265,15 @@ class ScorpionGame(private val dealer: Dealer) : Game, Actions {
         return true
     }
 
-    private fun highlight(card: CardEntity, highlight: Int) {
+    private fun highlight(card: Card, highlight: Int) {
         if (card.faceUp) {
             card.highlight = highlight
             highlighted.add(card)
+            dealer.cardChanged(card)
         }
     }
 
-    private fun moveCards(card: CardEntity, toGroup: Int, single: Boolean) {
+    private fun moveCards(card: Card, toGroup: Int, single: Boolean) {
         if (card.group == toGroup)
             throw IllegalArgumentException("Can only move between different columns")
         val from = cards[card.group]
@@ -262,20 +287,23 @@ class ScorpionGame(private val dealer: Dealer) : Game, Actions {
             c.group = toGroup
             c.position = to.size
             to.add(c)
+            dealer.cardChanged(c)
         }
 
         for (i in range.reversed()) {
             from.removeAt(i)
         }
 
-        for (i in range.first until from.size)
+        for (i in range.first until from.size) {
             from[i].position = i
+            dealer.cardChanged(from[i])
+        }
 
         if (calcNoMoves())
             spreadKitty()
     }
 
-    private fun findOneLower(cardValue: Int): CardEntity? {
+    private fun findOneLower(cardValue: Int): Card? {
         val value = cardValue % Game.CARDS_PER_SUIT
         return if (value != 0)
             dealer.findCard(cardValue - 1)
@@ -283,7 +311,7 @@ class ScorpionGame(private val dealer: Dealer) : Game, Actions {
             null
     }
 
-    private fun findOneHigher(cardValue: Int): CardEntity? {
+    private fun findOneHigher(cardValue: Int): Card? {
         val value = cardValue % Game.CARDS_PER_SUIT
         return if (value != Game.CARDS_PER_SUIT - 1)
             dealer.findCard(cardValue + 1)
@@ -293,8 +321,10 @@ class ScorpionGame(private val dealer: Dealer) : Game, Actions {
 
     private fun spreadKitty() {
         val kitty = cards[cards.kitty]
-        for (card in kitty)
+        for (card in kitty) {
             card.spread = true
+            dealer.cardChanged(card)
+        }
     }
 
     data class CardLayout(
@@ -312,7 +342,7 @@ class ScorpionGame(private val dealer: Dealer) : Game, Actions {
         const val HIGHLIGHT_ONE_LOWER: Int  = 2
         const val HIGHLIGHT_ONE_HIGHER: Int  = 3
 
-        val List<List<CardEntity>>.kitty: Int
+        val List<List<Card>>.kitty: Int
             get() = lastIndex
 
         val filters: List<ColorFilter?> = listOf(

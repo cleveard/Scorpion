@@ -5,7 +5,12 @@ import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Entity
 import androidx.room.Index
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
+import androidx.room.Query
+import androidx.room.RewriteQueriesToDropUnusedColumns
+import androidx.room.Transaction
 
 @Entity(
     tableName = CardDao.TABLE,
@@ -14,12 +19,31 @@ import androidx.room.PrimaryKey
     ]
 )
 data class CardEntity(
-    @PrimaryKey @ColumnInfo(name = CardDao.GENERATION) var generation: Long,
+    @ColumnInfo(name = CardDao.GENERATION) var generation: Long,
+    @ColumnInfo(name = CardDao.VALUE) val value: Int,
+    @ColumnInfo(name = CardDao.GROUP) var group: Int,
+    @ColumnInfo(name = CardDao.POSITION) var position: Int,
+    @ColumnInfo(name = CardDao.FLAGS) val flags: MutableState<Int>,
+    @PrimaryKey(autoGenerate = true) @ColumnInfo(name = CardDao.ID, defaultValue = "NULL") var id: Long? = null,
+)
+
+data class Card(
+    @ColumnInfo(name = CardDao.GENERATION) var generation: Long,
     @ColumnInfo(name = CardDao.VALUE) val value: Int,
     @ColumnInfo(name = CardDao.GROUP) var group: Int,
     @ColumnInfo(name = CardDao.POSITION) var position: Int,
     @ColumnInfo(name = CardDao.FLAGS) val flags: MutableState<Int>
 ) {
+    fun toEntity(): CardEntity {
+        return CardEntity(
+            generation,
+            value,
+            group,
+            position,
+            flags
+        )
+    }
+
     var faceDown: Boolean
         get() = (flags.value and FACE_DOWN) != 0
         set(value) {
@@ -60,8 +84,76 @@ data class CardEntity(
 
 @Dao
 abstract class CardDao {
+    /**
+     * Insert a card
+     */
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    protected suspend abstract fun insert(card: CardEntity): Long
+
+    /**
+     * Insert a card
+     */
+    protected suspend fun insert(card: Card): Long {
+        return insert(card.toEntity())
+    }
+
+    /**
+     * Clear the table
+     */
+    @Transaction()
+    @Query("DELETE FROM $TABLE")
+    abstract suspend fun deleteAll()
+
+    /**
+     * Clear any redos past a generation
+     * @param generation The redo to start clearing
+     */
+    @Transaction()
+    @Query("DELETE FROM $TABLE WHERE $GENERATION >= :generation")
+    abstract suspend fun clearRedo(generation: Long)
+
+    /**
+     * Add a list of card at a specific generation
+     * @param list The list of cards
+     * @param generation The generation for the list
+     */
+    @Transaction()
+    open suspend fun addAll(list: List<Card>, generation: Long) {
+        for (card in list) {
+            card.generation = generation
+            insert(card)
+        }
+    }
+
+    /**
+     * Get the most recent generation of cards
+     * @param generation The generation of the list
+      */
+    @RewriteQueriesToDropUnusedColumns
+    @Query("SELECT * FROM $TABLE JOIN (SELECT $VALUE t_value, MAX($GENERATION) t_gen FROM $TABLE WHERE $GENERATION <= :generation GROUP BY $VALUE) WHERE $VALUE = t_value AND $GENERATION = t_gen ORDER BY $VALUE")
+    abstract suspend fun getAllGeneration(generation: Long): List<Card>
+
+    /**
+     * Get the list of cards changed when a generation is undone
+     * @param generation The generation to undo
+     */
+    @RewriteQueriesToDropUnusedColumns
+    @Query("SELECT * FROM $TABLE JOIN " +
+        "(SELECT $VALUE t_value, MAX($GENERATION) t_gen FROM $TABLE WHERE $VALUE in " +
+        "(SELECT $VALUE FROM $TABLE WHERE $GENERATION = :generation) AND $GENERATION <= :generation - 1 GROUP BY $VALUE)" +
+        " WHERE $VALUE = t_value AND $GENERATION = t_gen ORDER BY $VALUE")
+    abstract suspend fun undo(generation: Long): List<Card>
+
+    /**
+     * Get the list of cards changed when a generation is redone
+     * @param generation The generation to redo
+     */
+    @RewriteQueriesToDropUnusedColumns
+    @Query("SELECT * FROM $TABLE WHERE $GENERATION = :generation")
+    abstract suspend fun redo(generation: Long): List<Card>
 
     companion object {
+        const val ID = "card_id"
         const val TABLE = "card_table"
         const val GENERATION = "card_generation"
         const val VALUE = "card_value"

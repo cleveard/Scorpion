@@ -1,0 +1,118 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 0,
+    "identityHash": "610189b7e15a09e887a4b1daaebc4221",
+    "entities": [
+      {
+        "tableName": "card_table",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`card_generation` INTEGER NOT NULL, `card_value` INTEGER NOT NULL, `card_group` INTEGER NOT NULL, `card_position` INTEGER NOT NULL, `card_flags` INTEGER NOT NULL, PRIMARY KEY(`card_generation`))",
+        "fields": [
+          {
+            "fieldPath": "generation",
+            "columnName": "card_generation",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "value",
+            "columnName": "card_value",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "group",
+            "columnName": "card_group",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "position",
+            "columnName": "card_position",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "flags",
+            "columnName": "card_flags",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "card_generation"
+          ]
+        },
+        "indices": [
+          {
+            "name": "card_index",
+            "unique": true,
+            "columnNames": [
+              "card_generation",
+              "card_value"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `card_index` ON `${TABLE_NAME}` (`card_generation`, `card_value`)"
+          }
+        ],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "state_table",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`state_generation` INTEGER NOT NULL, `state_game` TEXT NOT NULL, `state_state` BLOB, `state_flags` INTEGER NOT NULL, PRIMARY KEY(`state_generation`))",
+        "fields": [
+          {
+            "fieldPath": "generation",
+            "columnName": "state_generation",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "game",
+            "columnName": "state_game",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state_state",
+            "affinity": "BLOB",
+            "notNull": false
+          },
+          {
+            "fieldPath": "flags",
+            "columnName": "state_flags",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "state_generation"
+          ]
+        },
+        "indices": [
+          {
+            "name": "state_index",
+            "unique": true,
+            "columnNames": [
+              "state_generation",
+              "state_game"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `state_index` ON `${TABLE_NAME}` (`state_generation`, `state_game`)"
+          }
+        ],
+        "foreignKeys": []
+      }
+    ],
+    "views": [],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '610189b7e15a09e887a4b1daaebc4221')"
+    ]
+  }
+}
