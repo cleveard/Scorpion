@@ -95,7 +95,7 @@ object CardGroup {
             )
         ) {
             for (card in cards) {
-                if (card.spread) {
+                if (card.spread || card == cards.last()) {
                     GetImage(
                         card,
                         game

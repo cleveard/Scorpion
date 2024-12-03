@@ -1,13 +1,19 @@
 package com.github.cleveard.scorpion.ui.widgets
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateListOf
@@ -117,46 +123,51 @@ class ScorpionGame(private val dealer: Dealer) : Game {
 
         BoxWithConstraints(
             modifier = modifier
-                .fillMaxWidth()
-                .fillMaxHeight()
+                .fillMaxSize()
         ) {
             val twoRows = maxHeight > maxWidth
             val cols = if (twoRows) cards.size - 1 else cards.size
             val colWidth = maxWidth / cols
             measurements.scale = (colWidth - padding) / measurements.horizontalSpacing.size
 
-            if (twoRows) {
-                CardGroup.RowContent(
-                    cards[cards.kitty],
-                    this@ScorpionGame,
-                    modifier = Modifier
-                        .height(measurements.verticalSpacing.size * measurements.scale + padding)
-                        .align(Alignment.TopEnd)
-                        .padding(padding)
-                )
-            }
-
-            Row(
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.TopStart)
-                    .let {
-                        if (twoRows)
-                            it.offset(y = measurements.verticalSpacing.size * measurements.scale + padding)
-                        else
-                            it
-                    }
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
             ) {
-                for (group in cards.indices) {
-                    if (group != cards.kitty || !twoRows) {
-                        CardGroup.ColumnContent(
-                            cards[group],
-                            this@ScorpionGame,
-                            modifier = Modifier
-                                .width(colWidth)
-                                .align(Alignment.Top)
-                                .padding(padding)
-                        )
+                if (twoRows) {
+                    CardGroup.RowContent(
+                        cards[cards.kitty],
+                        this@ScorpionGame,
+                        modifier = Modifier
+                            .height(measurements.verticalSpacing.size * measurements.scale + padding)
+                            .align(Alignment.TopEnd)
+                            .padding(padding)
+                    )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.TopStart)
+                        .let {
+                            if (twoRows)
+                                it.offset(y = measurements.verticalSpacing.size * measurements.scale + padding)
+                            else
+                                it
+                        }
+                ) {
+                    for (group in cards.indices) {
+                        if (group != cards.kitty || !twoRows) {
+                            CardGroup.ColumnContent(
+                                cards[group],
+                                this@ScorpionGame,
+                                modifier = Modifier
+                                    .width(colWidth)
+                                    .align(Alignment.Top)
+                                    .padding(padding)
+                            )
+                        }
                     }
                 }
             }
