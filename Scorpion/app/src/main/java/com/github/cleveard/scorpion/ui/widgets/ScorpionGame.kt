@@ -1,15 +1,11 @@
 package com.github.cleveard.scorpion.ui.widgets
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -84,8 +80,11 @@ class ScorpionGame(private val dealer: Dealer) : Game {
     }
 
     override fun setCards(cardList: List<Card>) {
+        clearHighlights()
+
         val oldList: MutableList<Card> = mutableListOf()
-        for (card in cardList.sortedWith(compareBy({ it.group }, { it.position }))) {
+        val sorted = cardList.sortedWith(compareBy({ it.group }, { it.position }))
+        for (card in sorted) {
             val old = dealer.findCard(card.value)
             if (old === card)
                 throw IllegalArgumentException("Cannot update existing cards")
@@ -130,9 +129,9 @@ class ScorpionGame(private val dealer: Dealer) : Game {
             val colWidth = maxWidth / cols
             measurements.scale = (colWidth - padding) / measurements.horizontalSpacing.size
 
-            Box(
+            Column(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
             ) {
                 if (twoRows) {
@@ -141,7 +140,7 @@ class ScorpionGame(private val dealer: Dealer) : Game {
                         this@ScorpionGame,
                         modifier = Modifier
                             .height(measurements.verticalSpacing.size * measurements.scale + padding)
-                            .align(Alignment.TopEnd)
+                            .align(Alignment.End)
                             .padding(padding)
                     )
                 }
@@ -149,13 +148,7 @@ class ScorpionGame(private val dealer: Dealer) : Game {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .align(Alignment.TopStart)
-                        .let {
-                            if (twoRows)
-                                it.offset(y = measurements.verticalSpacing.size * measurements.scale + padding)
-                            else
-                                it
-                        }
+                        .align(Alignment.Start)
                 ) {
                     for (group in cards.indices) {
                         if (group != cards.kitty || !twoRows) {
@@ -191,22 +184,23 @@ class ScorpionGame(private val dealer: Dealer) : Game {
     }
 
     override fun onClick(card: Card) {
-        if (isClickable(card)) {
-            withUndo {
+        dealer.scope.launch {
+            if (isClickable(card)) {
                 val flags = card.flags.value and Card.HIGHLIGHT_MASK
                 clearHighlights()
                 if (card.faceDown) {
                     card.faceDown = false
-                    dealer.cardChanged(card)
-                } else if (flags == HIGHLIGHT_ONE_LOWER) {
-                    checkAndMove(card)
-                } else if (flags != HIGHLIGHT_SELECTED) {
-                    highlight(card, HIGHLIGHT_SELECTED)
-                    findOneLower(card.value)?.let {
-                        highlight(it, HIGHLIGHT_ONE_LOWER)
-                    }
-                    findOneHigher(card.value)?.let {
-                        highlight(it, HIGHLIGHT_ONE_HIGHER)
+                } else if (flags != HIGHLIGHT_ONE_LOWER || !withUndo {
+                            checkAndMove(card)
+                        }) {
+                    if (flags != HIGHLIGHT_SELECTED) {
+                        highlight(card, HIGHLIGHT_SELECTED)
+                        findOneLower(card.value)?.let {
+                            highlight(it, HIGHLIGHT_ONE_LOWER)
+                        }
+                        findOneHigher(card.value)?.let {
+                            highlight(it, HIGHLIGHT_ONE_HIGHER)
+                        }
                     }
                 }
             }
@@ -214,35 +208,43 @@ class ScorpionGame(private val dealer: Dealer) : Game {
     }
 
     override fun onDoubleClick(card: Card) {
-        withUndo {
-            clearHighlights()
-            checkAndMove(card)
+        dealer.scope.launch {
+            withUndo {
+                clearHighlights()
+                checkAndMove(card)
+            }
         }
     }
 
-    private fun withUndo(actions: suspend () -> Unit) {
-        dealer.scope.launch {
-            dealer.withUndo(this::class.qualifiedName!!) {
-                actions()
-            }
+    private suspend fun <T> withUndo(actions: suspend () -> T): T {
+        return dealer.withUndo {
+            actions()
         }
     }
-    private fun checkAndMove(card: Card) {
+    private fun checkAndMove(card: Card): Boolean {
         if (card.value % Game.CARDS_PER_SUIT == Game.CARDS_PER_SUIT - 1) {
-            for (empty in 0 until cards.lastIndex) {
-                if (cards[empty].isEmpty()) {
-                    moveCards(card, empty, true)
-                    break
+            val moveAlone = cardLayout.kingMovesAlone && card.position < cards[card.group].lastIndex &&
+                cards[card.group][card.position + 1].value != card.value - 1
+            if (card.position != 0 || moveAlone) {
+                for (empty in 0 until cards.lastIndex) {
+                    if (cards[empty].isEmpty()) {
+                        moveCards(card, empty, moveAlone)
+                        return true
+                    }
                 }
             }
-        } else
+        } else {
             findOneHigher(card.value)?.let {
                 val to = cards[it.group]
                 val c = to[it.position]
                 if (it.group != card.group && it.position == to.lastIndex && c.faceUp) {
                     moveCards(card, it.group, card.group == cards.kitty)
+                    return true
                 }
             }
+        }
+
+        return false
     }
 
     private fun clearHighlights() {
@@ -280,13 +282,12 @@ class ScorpionGame(private val dealer: Dealer) : Game {
         if (card.faceUp) {
             card.highlight = highlight
             highlighted.add(card)
-            dealer.cardChanged(card)
         }
     }
 
     private fun moveCards(card: Card, toGroup: Int, single: Boolean) {
         if (card.group == toGroup)
-            throw IllegalArgumentException("Can only move between different columns")
+            throw IllegalArgumentException("Can only move between different groups")
         val from = cards[card.group]
         val to = cards[toGroup]
         val range = if (single)

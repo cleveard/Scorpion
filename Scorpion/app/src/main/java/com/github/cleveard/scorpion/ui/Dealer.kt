@@ -11,7 +11,7 @@ interface Dealer {
     suspend fun deal()
     suspend fun gameVariants()
     fun findCard(cardValue: Int): Card
-    suspend fun withUndo(name: String, action: suspend () -> Unit)
+    suspend fun <T> withUndo(action: suspend () -> T): T
     fun cardChanged(card: Card)
     fun stateChanged(stateBlob: ByteArray)
     suspend fun undo(): Pair<State, List<Card>>?

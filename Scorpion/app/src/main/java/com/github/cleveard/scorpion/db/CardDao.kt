@@ -94,7 +94,7 @@ abstract class CardDao {
      * Insert a card
      */
     protected suspend fun insert(card: Card): Long {
-        return insert(card.toEntity())
+        return insert(card.toEntity().also { it.flags.value = it.flags.value and Card.HIGHLIGHT_MASK.inv()})
     }
 
     /**

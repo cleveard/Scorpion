@@ -1,7 +1,10 @@
 package com.github.cleveard.scorpion
 
+import android.app.Application
+import android.util.Log
+import android.widget.Toast
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.cleveard.scorpion.db.CardDatabase
 import com.github.cleveard.scorpion.db.Card
@@ -12,7 +15,9 @@ import com.github.cleveard.scorpion.ui.widgets.ScorpionGame
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
-class MainActivityViewModel: ViewModel(), Dealer {
+private const val LOG_TAG: String = "CardLog"
+
+class MainActivityViewModel(application: Application): AndroidViewModel(application), Dealer {
     override val scope: CoroutineScope
         get() = viewModelScope
     val cards: MutableList<Card> = mutableListOf<Card>().apply {
@@ -42,10 +47,21 @@ class MainActivityViewModel: ViewModel(), Dealer {
 
     override fun findCard(cardValue: Int): Card = cards[cardValue]
 
-    override suspend fun withUndo(name: String, action: suspend () -> Unit) {
+    override suspend fun <T> withUndo(action: suspend () -> T): T {
         var success = false
         try {
-            success = CardDatabase.db.withUndo(name, action)
+            return CardDatabase.db.withUndo(game::class.qualifiedName!!,
+                {message, generation, state, list ->
+                    Toast.makeText(getApplication(), message, Toast.LENGTH_LONG).show()
+                    Log.d(LOG_TAG, "Generation: ${generation} - ${state?.generation}")
+                    for (i in 0 until cards.size.coerceAtLeast(list?.size ?: 0)) {
+                        val c = this.cards.getOrNull(i)
+                        val d = list?.getOrNull(i)
+                        Log.d(LOG_TAG, "Card: ${c?.generation} - ${d?.generation}, ${c?.value} - ${d?.value}, ${c?.group} - ${d?.group}, ${c?.position} - ${d?.position}, ${c?.spread} - ${d?.spread}, ${c?.faceDown} - ${d?.faceDown}, ${c?.highlight} - ${d?.highlight}")
+                    }
+                }, action).also {
+                    success = true
+                }
         } finally {
             if (!success)
                 resetGame()

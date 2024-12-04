@@ -52,7 +52,7 @@ abstract class CardDatabase: RoomDatabase() {
             generation = state.generation
             getCardDao().getAllGeneration(generation).let {cards ->
                 // Sanity check game
-                if (cards.size == Game.CARD_COUNT && cards.allWithIndices() {i, card -> i == card.value })
+                if (cards.size == Game.CARD_COUNT && cards.allWithIndices {i, card -> i == card.value })
                     Pair(state, cards)
                 else
                     null
@@ -108,29 +108,70 @@ abstract class CardDatabase: RoomDatabase() {
         this.stateBlob = stateBlob
     }
 
-    @Transaction
-    open suspend fun withUndo(name: String, action: suspend () -> Unit): Boolean {
+    private suspend fun loadAndCheck(callback: (message: String?, generation: Long, state: State?, cards: List<Card>?) -> Unit) {
+        val pair = loadGame()
+        val error = run {
+            if (pair == null)
+                return@run "Can't reload the game"
+            if (pair.first.generation != generation)
+                return@run "Generation incorrect"
+            if (pair.second.size != 52)
+                return@run "Size incorrect"
+            val list = pair.second.toMutableList()
+            list.sortBy { it.value }
+            for (i in list.indices) {
+                if (i != list[i].value)
+                    return@run "Card $i value incorrect"
+            }
+            list.sortWith(compareBy({ it.group }, { it.position }))
+            var lastGroup = 0
+            var lastPosition = -1
+            for (c in list) {
+                if (c.group < lastGroup)
+                    return@run "Group invalid"
+                if (
+                    (if (c.group == lastGroup)
+                        c.position != lastPosition + 1
+                    else
+                        c.position != 0)
+                )
+                    return@run "Position invalid"
+                lastGroup = c.group
+                lastPosition = c.position
+            }
+            null
+        }
+
+        if (error != null)
+            callback(error, generation, pair?.first, pair?.second)
+    }
+
+    suspend fun <T> withUndo(name: String, callback: (message: String?, generation: Long, state: State?, cards: List<Card>?) -> Unit, action: suspend () -> T): T {
         var success = false
         ++undoNesting
         try {
-            action()
-            success = true
+            return action().also {
+                success = true
+            }
         } finally {
             if (undoNesting > 1) {
                 --undoNesting
                 success = true
             } else {
                 undoNesting = 0
-                if (success) {
-                    if (changedCards.isNotEmpty() || stateBlob != null)
-                        newGeneration(State(0L, name, stateBlob), changedCards)
+                try {
+                    if (success) {
+                        if (changedCards.isNotEmpty() || stateBlob != null) {
+                            newGeneration(State(0L, name, stateBlob), changedCards)
+                            loadAndCheck(callback)
+                        }
+                    }
+                } finally {
+                    stateBlob = null
+                    changedCards.clear()
                 }
-                stateBlob = null
-                changedCards.clear()
             }
         }
-
-        return success
     }
 
     companion object {
