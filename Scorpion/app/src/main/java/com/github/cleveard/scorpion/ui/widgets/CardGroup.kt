@@ -1,5 +1,6 @@
 package com.github.cleveard.scorpion.ui.widgets
 
+import android.content.Context
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -15,14 +16,23 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
+import coil3.Image
 import coil3.compose.AsyncImage
+import coil3.imageLoader
+import coil3.request.ImageRequest
 import com.github.cleveard.scorpion.db.Card
 import com.github.cleveard.scorpion.ui.Game
+import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
 
 /**
  * TODO: document your custom view class.
  */
 object CardGroup {
+    var cardWitdh: Int = 234
+        private set
+    var cardHeight: Int = 333
+        private set
     private const val ASSET_PATH = "file:///android_asset/"
     private const val FRONT_ASSET_PATH = ASSET_PATH + "cards/fronts/"
     private const val BACK_ASSET_PATH = ASSET_PATH + "cards/backs/"
@@ -82,6 +92,59 @@ object CardGroup {
         "diamonds_queen.svg",
         "diamonds_king.svg",
     )
+
+    val backIds: List<String> = listOf(
+        "abstract.svg",
+        "abstract_clouds.svg",
+        "abstract_scene.svg",
+        "astronaut.svg",
+        "blue.svg",
+        "blue2.svg",
+        "cars.svg",
+        "castle.svg",
+        "fish.svg",
+        "frog.svg",
+        "red.svg",
+        "red2.svg"
+    )
+    suspend fun preloadCards(context: Context) {
+        for (name in frontIds) {
+            suspendCoroutine {
+                val request = ImageRequest.Builder(context)
+                    .data(FRONT_ASSET_PATH + name)
+                    .target(object: coil3.target.Target {
+                        override fun onError(error: Image?) {
+                            throw IllegalArgumentException("Missing asset ${FRONT_ASSET_PATH + name}")
+                        }
+
+                        override fun onSuccess(result: Image) {
+                            it.resume(Unit)
+                        }
+                    })
+                    .build()
+                context.imageLoader.enqueue(request)
+            }
+        }
+        for (name in backIds) {
+            suspendCoroutine {
+                val request = ImageRequest.Builder(context)
+                    .data(BACK_ASSET_PATH + name)
+                    .target(object: coil3.target.Target {
+                        override fun onError(error: Image?) {
+                            throw IllegalArgumentException("Missing asset ${BACK_ASSET_PATH + name}")
+                        }
+
+                        override fun onSuccess(result: Image) {
+                            cardWitdh = result.width
+                            cardHeight = result.height
+                            it.resume(Unit)
+                        }
+                    })
+                    .build()
+                context.imageLoader.enqueue(request)
+            }
+        }
+    }
 
     @Composable
     fun ColumnContent(

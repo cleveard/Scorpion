@@ -34,6 +34,7 @@ import com.github.cleveard.scorpion.db.CardEntity
 import com.github.cleveard.scorpion.db.State
 import com.github.cleveard.scorpion.ui.Game
 import com.github.cleveard.scorpion.ui.Dealer
+import com.github.cleveard.scorpion.ui.widgets.CardGroup
 import com.github.cleveard.scorpion.ui.widgets.ScorpionGame
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -324,6 +325,7 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
 
     fun initialize(callback: () -> Unit) {
         viewModelScope.launch {
+            CardGroup.preloadCards(getApplication())
             resetGame()
             callback()
         }

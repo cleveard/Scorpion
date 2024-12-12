@@ -65,8 +65,8 @@ class ScorpionGame(private val dealer: Dealer) : Game {
 
     @Composable
     override fun Content(modifier: Modifier) {
-        measurements.verticalSpacing.size = 333.dp
-        measurements.horizontalSpacing.size = 234.dp
+        measurements.verticalSpacing.size = CardGroup.cardHeight.dp
+        measurements.horizontalSpacing.size = CardGroup.cardWitdh.dp
 
         BoxWithConstraints(
             modifier = modifier
