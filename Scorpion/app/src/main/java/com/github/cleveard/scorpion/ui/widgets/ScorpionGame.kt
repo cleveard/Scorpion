@@ -150,10 +150,12 @@ class ScorpionGame(private val dealer: Dealer) : Game {
                         if (highlight != HIGHLIGHT_SELECTED) {
                             highlight(card, HIGHLIGHT_SELECTED)
                             findOneLower(card.value)?.let {
-                                highlight(it, HIGHLIGHT_ONE_LOWER)
+                                if (card.group != it.group || card.position != it.position - 1)
+                                    highlight(it, HIGHLIGHT_ONE_LOWER)
                             }
                             findOneHigher(card.value)?.let {
-                                highlight(it, HIGHLIGHT_ONE_HIGHER)
+                                if (card.group != it.group || card.position != it.position + 1)
+                                    highlight(it, HIGHLIGHT_ONE_HIGHER)
                             }
                         }
                     }
