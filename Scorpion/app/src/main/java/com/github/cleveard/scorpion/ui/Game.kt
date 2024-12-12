@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ColorFilter
 import com.github.cleveard.scorpion.db.Card
+import com.github.cleveard.scorpion.db.CardEntity
 import com.github.cleveard.scorpion.db.State
 import com.github.cleveard.scorpion.ui.widgets.LayoutMeasurements
 
@@ -11,14 +12,20 @@ interface Game: Actions {
     val measurements: LayoutMeasurements
     val cardBackAssetName: String
 
-    suspend fun deal(shuffled: List<Card>): State
-
-    fun setCards(cardList: List<Card>)
+    suspend fun deal(shuffled: IntArray): Pair<State, List<CardEntity>>
 
     @Composable
     fun Content(modifier: Modifier)
 
+    fun variantContent(): DialogContent?
+
+    fun settingsContent(): DialogContent?
+
     fun getFilter(highlight: Int): ColorFilter?
+
+    fun checkGameOver(list: List<Card>, generation: Long)
+
+    fun isValid(cards: List<Card>, card: Card, lastCard: Card?): String?
 
     companion object {
         const val CARDS_PER_SUIT: Int = 13

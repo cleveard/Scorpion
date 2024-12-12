@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.snapshots.SnapshotStateList
@@ -84,7 +85,7 @@ object CardGroup {
 
     @Composable
     fun ColumnContent(
-        cards: SnapshotStateList<Card>,
+        cards: List<Card?>,
         game: Game,
         modifier: Modifier = Modifier,
     ) {
@@ -94,11 +95,14 @@ object CardGroup {
                 game.measurements.verticalSpacing.spaceBy()
             )
         ) {
+            val imageModifier = Modifier.size(game.measurements.horizontalSpacing.size * game.measurements.scale,
+                game.measurements.verticalSpacing.size * game.measurements.scale)
             for (card in cards) {
-                if (card.spread || card == cards.last()) {
+                if (card?.spread != false || card == cards.last()) {
                     GetImage(
                         card,
-                        game
+                        game,
+                        modifier = imageModifier
                     )
                 }
             }
@@ -107,7 +111,7 @@ object CardGroup {
 
     @Composable
     fun RowContent(
-        cards: SnapshotStateList<Card>,
+        cards: List<Card?>,
         game: Game,
         modifier: Modifier = Modifier
     ) {
@@ -118,11 +122,14 @@ object CardGroup {
                     game.measurements.horizontalSpacing.spaceBy()
                 )
             ) {
+                val imageModifier = Modifier.size(game.measurements.horizontalSpacing.size * game.measurements.scale,
+                    game.measurements.verticalSpacing.size * game.measurements.scale)
                 for (card in cards) {
-                    if (card.spread || card.position == cards.lastIndex) {
+                    if (card?.spread != false || card.position == cards.lastIndex) {
                         GetImage(
                             card,
-                            game
+                            game,
+                            modifier = imageModifier
                         )
                     }
                 }
@@ -133,10 +140,13 @@ object CardGroup {
     @OptIn(ExperimentalFoundationApi::class)
     @Composable
     private fun GetImage(
-        card: Card,
+        card: Card?,
         game: Game,
         modifier: Modifier = Modifier
     ) {
+        if (card == null)
+            return
+
         var filter: ColorFilter? = null
         val resourcePath = if (card.faceDown)
             BACK_ASSET_PATH + game.cardBackAssetName
@@ -144,12 +154,13 @@ object CardGroup {
             filter = game.getFilter(card.highlight)
             FRONT_ASSET_PATH + frontIds[card.value]
         }
-        var combinedModifier = modifier
-        if (game.isClickable(card))
-            combinedModifier = combinedModifier.combinedClickable(
+        val combinedModifier = if (game.isClickable(card))
+            Modifier.combinedClickable(
                 onClick = { game.onClick(card) },
                 onDoubleClick = { game.onDoubleClick(card) }
             )
+        else
+            Modifier
         Box {
             AsyncImage(
                 resourcePath,

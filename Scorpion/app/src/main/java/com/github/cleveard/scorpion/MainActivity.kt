@@ -65,6 +65,8 @@ fun ScorpionPreview(dealer: Dealer? = null) {
                 .fillMaxHeight()
                 .background(Color(0xff277714))
         ) {
+            dealer?.showAlert?.invoke()
+
             if (landscape) {
                 Column(
                     modifier = Modifier.align(Alignment.TopEnd)

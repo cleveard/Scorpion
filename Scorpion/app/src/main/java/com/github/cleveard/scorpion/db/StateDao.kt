@@ -27,18 +27,18 @@ data class StateEntity(
 )
 
 data class State(
-    @ColumnInfo(name = StateDao.GENERATION) var generation: Long,
-    @ColumnInfo(name = StateDao.GAME) var game: String,
-    @ColumnInfo(name = StateDao.STATE) var state: ByteArray? = null,
+    @ColumnInfo(name = StateDao.GENERATION) val generation: Long,
+    @ColumnInfo(name = StateDao.GAME) val game: String,
+    @ColumnInfo(name = StateDao.STATE) val state: ByteArray? = null,
     @ColumnInfo(name = StateDao.FLAGS) var flags: Int = 0,
 ) {
-    fun toEnTity(): StateEntity {
-        return StateEntity(
-            generation,
-            game,
-            state,
-            flags
-        )
+    fun toEnTity(
+        generation: Long = this.generation,
+        group: String = this.game,
+        state: ByteArray? = this.state,
+        flags: Int = this.flags
+    ): StateEntity {
+        return StateEntity(generation, group, state, flags)
     }
 
     var undone: Boolean
@@ -78,13 +78,6 @@ abstract class StateDao {
     protected suspend abstract fun insert(state: StateEntity): Long
 
     /**
-     * Insert state
-     */
-    protected suspend fun insert(state: State): Long {
-        return insert(state.toEnTity())
-    }
-
-    /**
      * Clear the table
      */
     @Transaction()
@@ -102,13 +95,10 @@ abstract class StateDao {
     /**
      * Add a state block at a generation
      * @param list The list of cards
-     * @param generation The generation for the list
      */
     @Transaction()
-    open suspend fun insert(state: State, generation: Long) {
-        state.generation = generation
-        state.undone = false
-        insert(state)
+    open suspend fun insert(state: State) {
+        insert(state.toEnTity(flags = state.flags and State.UNDONE.inv()))
     }
 
     @RewriteQueriesToDropUnusedColumns
