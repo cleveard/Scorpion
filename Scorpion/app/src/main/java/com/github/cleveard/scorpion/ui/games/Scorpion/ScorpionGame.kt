@@ -1,5 +1,6 @@
-package com.github.cleveard.scorpion.ui.widgets
+package com.github.cleveard.scorpion.ui.games.Scorpion
 
+import android.os.Bundle
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -24,13 +25,14 @@ import androidx.compose.ui.unit.dp
 import com.github.cleveard.scorpion.R
 import com.github.cleveard.scorpion.db.Card
 import com.github.cleveard.scorpion.db.CardEntity
-import com.github.cleveard.scorpion.db.State
 import com.github.cleveard.scorpion.ui.Dealer
 import com.github.cleveard.scorpion.ui.DialogContent
 import com.github.cleveard.scorpion.ui.Game
+import com.github.cleveard.scorpion.ui.widgets.CardGroup
+import com.github.cleveard.scorpion.ui.widgets.LayoutMeasurements
 import kotlinx.coroutines.launch
 
-class ScorpionGame(private val dealer: Dealer) : Game {
+class ScorpionGame(private val dealer: Dealer, private val bundle: Bundle) : Game {
     private val cardLayout: CardLayout = CardLayout()
     private val padding: Dp = Dp(2.0f)
 
@@ -43,8 +45,12 @@ class ScorpionGame(private val dealer: Dealer) : Game {
     private val cardBack: MutableState<String> = mutableStateOf("red.svg")
     override val cardBackAssetName: String
         get() = cardBack.value
+    override val name: String
+        get() = ScorpionGame::class.qualifiedName!!
+    override val groupCount: Int
+        get() = COLUMN_COUNT + 1
 
-    override suspend fun deal(shuffled: IntArray): Pair<State, List<CardEntity>> {
+    override suspend fun deal(shuffled: IntArray): List<CardEntity> {
         val list = mutableListOf<CardEntity>()
         val iterator = shuffled.iterator()
         for (group in 0 until COLUMN_COUNT) {
@@ -60,7 +66,7 @@ class ScorpionGame(private val dealer: Dealer) : Game {
             list.add(CardEntity(0L, card, COLUMN_COUNT, position++, Card.calcFlags(faceDown = true)))
         }
 
-        return Pair(State(0L, ScorpionGame::class.qualifiedName!!), list)
+        return list
     }
 
     @Composable
@@ -187,7 +193,8 @@ class ScorpionGame(private val dealer: Dealer) : Game {
                             return
                     }
                 }
-                empty += c.group - 1 - (last?.group ?: -1)
+                if (c.group != (last?.group?: -1))
+                    ++empty
                 if ((c.value % Game.CARDS_PER_SUIT) == Game.CARDS_PER_SUIT - 1 && c.faceUp &&
                     (c.position > 0 || (list[c.value - 1].let { it.group != c.group || it.position != 1 }))
                 ) {
@@ -195,17 +202,29 @@ class ScorpionGame(private val dealer: Dealer) : Game {
                 }
             } else {
                 kitty.add(c)
-                if (c.faceDown && c.spread)
-                    return
+                if (c.faceDown) {
+                    if (c.spread)
+                        return
+                } else if (c.value % Game.CARDS_PER_SUIT == Game.CARDS_PER_SUIT - 1)
+                    ++kings
             }
             last = c
         }
 
-        if (kings > 0 && empty > 0)
+        if (kings > 0 && empty < COLUMN_COUNT)
             return
 
-        if (kitty.isNotEmpty() && kitty[0].spread) {
-            dealer.showNewGameOrDismissAlert(R.string.game_over)
+        if (kitty.isEmpty() || kitty[0].spread) {
+            for (s in 0 until Game.CARD_COUNT step Game.CARDS_PER_SUIT) {
+                val g = list[s].group
+                for (c in 0 until Game.CARDS_PER_SUIT) {
+                    if (list[s + c].let { it.group != g || it.position != Game.CARDS_PER_SUIT - 1 - c }) {
+                        dealer.showNewGameOrDismissAlert(R.string.game_over)
+                        return
+                    }
+                }
+            }
+            dealer.showNewGameOrDismissAlert(R.string.game_won)
             return
         }
 

@@ -133,7 +133,8 @@ fun ToolContent(landscape: Boolean, dealer: Dealer?) {
             dealer?.scope?.launch {
                 dealer.undo()
             }
-        }
+        },
+        enabled = dealer?.canUndo() != false
     ) {
         Icon(
             imageVector = ImageVector.vectorResource(R.drawable.undo_svgrepo_com),
@@ -146,7 +147,8 @@ fun ToolContent(landscape: Boolean, dealer: Dealer?) {
             dealer?.scope?.launch {
                 dealer.redo()
             }
-        }
+        },
+        enabled = dealer?.canRedo() != false
     ) {
         Icon(
             imageVector = ImageVector.vectorResource(R.drawable.redo_svgrepo_com),

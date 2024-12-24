@@ -5,14 +5,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ColorFilter
 import com.github.cleveard.scorpion.db.Card
 import com.github.cleveard.scorpion.db.CardEntity
-import com.github.cleveard.scorpion.db.State
 import com.github.cleveard.scorpion.ui.widgets.LayoutMeasurements
 
 interface Game: Actions {
     val measurements: LayoutMeasurements
     val cardBackAssetName: String
+    val name: String
+    val groupCount: Int
 
-    suspend fun deal(shuffled: IntArray): Pair<State, List<CardEntity>>
+    suspend fun deal(shuffled: IntArray): List<CardEntity>
 
     @Composable
     fun Content(modifier: Modifier)

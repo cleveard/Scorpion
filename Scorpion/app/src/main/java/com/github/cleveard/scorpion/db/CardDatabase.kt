@@ -27,7 +27,8 @@ class Converters {
 @Database(
     entities = [
         CardEntity::class,
-        StateEntity::class
+        StateEntity::class,
+        HighlightEntity::class
     ],
     version = 1
 )
@@ -35,61 +36,53 @@ class Converters {
 abstract class CardDatabase: RoomDatabase() {
     abstract fun getCardDao(): CardDao
     abstract fun getStateDao(): StateDao
-
-    suspend fun getGeneration(): Long {
-        return getStateDao().getAll().lastOrNull { it.undone }?.generation ?: 0
-    }
+    abstract fun getHighlightDao(): HighlightDao
 
     @Transaction
-    open suspend fun loadGame(): Pair<State, List<Card>>? {
-        return getStateDao().getAll().lastOrNull { !it.undone }?.let {state ->
-            val generation = state.generation
-            getCardDao().getAllGeneration(generation).let {cards ->
-                // Sanity check game
-                if (cards.size == Game.CARD_COUNT && cards.allWithIndices {i, card -> i == card.value })
-                    Pair(state, cards)
-                else
-                    null
-            }
+    open suspend fun loadGame(generation: Long): Pair<MutableList<Card>, List<HighlightEntity>>? {
+        return getCardDao().getAllGeneration(generation).toMutableList().let {cards ->
+            val highlight = db.getHighlightDao().get()
+            // Sanity check game
+            if (cards.size == Game.CARD_COUNT && cards.allWithIndices {i, card -> i == card.value })
+                Pair(cards, highlight)
+            else
+                null
         }
     }
+
     @Transaction
     open suspend fun clearRedo(generation: Long) {
-        getStateDao().clearRedo(generation)
         getCardDao().clearRedo(generation)
     }
 
     @Transaction
-    open suspend fun undo(generation: Long): Pair<State, List<CardEntity>>? {
-        return getStateDao().undo(generation)?.let {
-            Pair(it, getCardDao().undo(generation))
-        }
+    open suspend fun undo(game: String, generation: Long): List<CardEntity>? {
+        if (generation <= 0)
+            return null
+        getStateDao().update(game, generation - 1)
+        return getCardDao().undo(generation)
     }
 
     @Transaction
-    open suspend fun redo(generation: Long): Pair<State, List<CardEntity>>? {
-        return getStateDao().redo(generation)?.let {
-            Pair(it, getCardDao().redo(generation))
-        }
+    open suspend fun redo(game: String, generation: Long): List<CardEntity>? {
+        getStateDao().update(game, generation)
+        return getCardDao().redo(generation)
     }
 
     @Transaction
-    open suspend fun newGeneration(state: State, cards: Collection<CardEntity>, generation: Long) {
+    open suspend fun newGeneration(game: String, cards: Collection<CardEntity>, generation: Long) {
         val cardDao = getCardDao()
         val stateDao = getStateDao()
 
-        if (state.generation != generation)
-            throw IllegalArgumentException("State does not have correct generation")
         if (cards.any { it.generation != generation })
             throw IllegalArgumentException("Cards do not have correct generation")
-        cardDao.clearRedo(generation)
-        stateDao.clearRedo(generation)
-        stateDao.insert(state)
+        clearRedo(generation)
+        stateDao.update(game, generation)
         cardDao.addAll(cards)
     }
 
     companion object {
-        private const val DATABASE_FILENAME = "SudokuPuzzles"
+        private const val DATABASE_FILENAME = "Scorpion"
         private var deleteOnCloseName: String? = null
 
         lateinit var db: CardDatabase

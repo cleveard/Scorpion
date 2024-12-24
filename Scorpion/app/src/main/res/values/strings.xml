@@ -4,4 +4,5 @@
     <string name="new_game">New Game</string>
     <string name="dismiss">Dismiss</string>
     <string name="database_inconsistency">An inconsistency in the data base was detected. Start a new game or dismiss and debug. See the Logcat for details</string>
+    <string name="game_won">Congratulations! You won the game.</string>
 </resources>

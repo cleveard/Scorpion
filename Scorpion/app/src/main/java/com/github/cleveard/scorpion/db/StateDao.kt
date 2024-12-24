@@ -1,71 +1,74 @@
 package com.github.cleveard.scorpion.db
 
+import android.os.Bundle
+import android.os.Parcel
+import androidx.lifecycle.LiveData
 import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Entity
-import androidx.room.Index
+import androidx.room.Ignore
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
-import androidx.room.RewriteQueriesToDropUnusedColumns
 import androidx.room.Transaction
 import java.util.Objects
 
-@Entity(
-    tableName = StateDao.TABLE,
-    indices = [
-        Index(StateDao.GENERATION, StateDao.GAME, name = StateDao.INDEX, unique = true)
-    ]
-)
+@Entity(tableName = StateDao.TABLE)
 data class StateEntity(
     @ColumnInfo(name = StateDao.GENERATION) var generation: Long,
-    @ColumnInfo(name = StateDao.GAME) var game: String,
-    @ColumnInfo(name = StateDao.STATE) var state: ByteArray? = null,
-    @ColumnInfo(name = StateDao.FLAGS) var flags: Int = 0,
-    @PrimaryKey(autoGenerate = true) @ColumnInfo(name = StateDao.ID) var id: Long = 0
-)
-
-data class State(
-    @ColumnInfo(name = StateDao.GENERATION) val generation: Long,
-    @ColumnInfo(name = StateDao.GAME) val game: String,
-    @ColumnInfo(name = StateDao.STATE) val state: ByteArray? = null,
-    @ColumnInfo(name = StateDao.FLAGS) var flags: Int = 0,
+    @PrimaryKey @ColumnInfo(name = StateDao.GAME) var game: String,
+    @ColumnInfo(name = StateDao.STATE) private var _state: ByteArray? = null
 ) {
-    fun toEnTity(
-        generation: Long = this.generation,
-        group: String = this.game,
-        state: ByteArray? = this.state,
-        flags: Int = this.flags
-    ): StateEntity {
-        return StateEntity(generation, group, state, flags)
+    constructor(generation: Long, game: String, bundle: Bundle): this(
+        generation, game, bundleToBlob(bundle)
+    )
+
+    val state: ByteArray?
+        get() = _state
+    @Ignore val bundle: Bundle = bundleFromBlob(state)
+
+    fun onBundleUpdated() {
+        _state = bundleToBlob(bundle)
     }
 
-    var undone: Boolean
-        get() = (flags and UNDONE) != 0
-        set(value) {
-            if (value)
-                flags = flags or UNDONE
-            else
-                flags = flags and UNDONE.inv()
-        }
 
     override fun equals(other: Any?): Boolean {
         if (other === this)
             return true
-        val v = (other as? State)?: return false
+        val v = (other as? StateEntity)?: return false
         return generation == v.generation &&
             game == v.game &&
-            state.contentEquals(v.state) &&
-            flags == v.flags
+            state.contentEquals(v.state)
     }
 
     override fun hashCode(): Int {
-        return Objects.hash(generation, game, state.contentHashCode(), flags)
+        return Objects.hash(generation, game, state.contentHashCode())
     }
 
     companion object {
-        const val UNDONE: Int = 0x01
+        fun bundleFromBlob(value: ByteArray?): Bundle {
+            return value?.let { it ->
+                val parcel = Parcel.obtain()
+                parcel.unmarshall(it, 0, it.size)
+                parcel.setDataPosition(0)
+                parcel.readBundle(Converters::class.java.classLoader).also {
+                    parcel.recycle()
+                }
+            } ?: Bundle()
+        }
+
+        fun bundleToBlob(value: Bundle): ByteArray? {
+            val parcel = Parcel.obtain()
+            return if (value.keySet().isNotEmpty())
+                null
+            else {
+                parcel.writeBundle(value)
+                parcel.marshall().also {
+                    parcel.recycle()
+                }
+            }
+        }
     }
 }
 
@@ -74,82 +77,27 @@ abstract class StateDao {
     /**
      * Insert state
      */
-    @Insert(onConflict = OnConflictStrategy.ABORT)
-    protected suspend abstract fun insert(state: StateEntity): Long
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    abstract suspend fun insert(state: StateEntity): Long
 
-    /**
-     * Clear the table
-     */
-    @Transaction()
-    @Query("DELETE FROM $TABLE")
-    abstract suspend fun deleteAll()
+    @Query("SELECT * FROM $TABLE WHERE $GAME = :name")
+    abstract suspend fun get(name: String): StateEntity?
 
-    /**
-     * Clear any redos past a generation
-     * @param generation The redo to start clearing
-     */
-    @Transaction()
-    @Query("DELETE FROM $TABLE WHERE $GENERATION >= :generation")
-    abstract suspend fun clearRedo(generation: Long)
+    @Query("SELECT * FROM $TABLE where $GAME = :name")
+    abstract fun getGeneration(name: String): LiveData<StateEntity?>
 
-    /**
-     * Add a state block at a generation
-     * @param list The list of cards
-     */
-    @Transaction()
-    open suspend fun insert(state: State) {
-        insert(state.toEnTity(flags = state.flags and State.UNDONE.inv()))
-    }
-
-    @RewriteQueriesToDropUnusedColumns
-    @Query("SELECT * FROM $TABLE ORDER BY $GENERATION")
-    abstract suspend fun getAll(): List<State>
-
-    /**
-     * Get the state at a generation
-     * @param generation The generation of the state
-     */
-    @RewriteQueriesToDropUnusedColumns
-    @Query("SELECT * FROM $TABLE WHERE $GENERATION = :generation")
-    abstract suspend fun getGeneration(generation: Long): State?
-
-    /**
-     * Mark state as undone
-     */
     @Transaction
-    @Query("UPDATE $TABLE SET $FLAGS = ($FLAGS & ~${State.UNDONE}) | (:undone & ${State.UNDONE}) WHERE $GENERATION = :generation")
-    protected abstract suspend fun setUndone(generation: Long, undone: Int)
+    @Query("UPDATE OR ABORT $TABLE SET $GENERATION = :generation WHERE $GAME = :name ")
+    abstract suspend fun update(name: String, generation: Long)
 
-    /**
-     * Get the state when a generation is undone
-     * @param generation The generation to undo
-     */
     @Transaction
-    open suspend fun undo(generation: Long): State? {
-        if (generation == 0L)
-            return null
-        setUndone(generation, State.UNDONE)
-        return getGeneration(generation - 1)
-    }
-
-    /**
-     * Get the state when a generation is redone
-     * @param generation The generation to redo
-     */
-    @Transaction
-    open suspend fun redo(generation: Long): State? {
-        return getGeneration(generation)?.also {
-            setUndone(generation, 0)
-        }
-    }
+    @Query("UPDATE OR ABORT $TABLE SET $STATE = :state WHERE $GAME = :name ")
+    abstract suspend fun update(name: String, state: ByteArray?)
 
     companion object {
-        const val ID = "state_id"
         const val TABLE = "state_table"
         const val GENERATION = "state_generation"
         const val GAME = "state_game"
         const val STATE = "state_state"
-        const val FLAGS = "state_flags"
-        const val INDEX = "state_index"
     }
 }

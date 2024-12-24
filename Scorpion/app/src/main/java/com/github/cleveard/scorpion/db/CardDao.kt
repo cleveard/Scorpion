@@ -6,7 +6,6 @@ import androidx.room.Dao
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.Insert
-import androidx.room.MapColumn
 import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
@@ -17,7 +16,11 @@ import com.github.cleveard.scorpion.ui.Game
 @Entity(
     tableName = CardDao.TABLE,
     indices = [
-        Index(CardDao.GENERATION, CardDao.VALUE, name = CardDao.INDEX, unique = true)
+        Index(
+            value = [CardDao.VALUE, CardDao.GENERATION],
+            unique = true,
+            orders = [Index.Order.ASC, Index.Order.ASC]
+        )
     ]
 )
 data class CardEntity(
@@ -26,7 +29,7 @@ data class CardEntity(
     @ColumnInfo(name = CardDao.GROUP) val group: Int,
     @ColumnInfo(name = CardDao.POSITION) val position: Int,
     @ColumnInfo(name = CardDao.FLAGS) val flags: Int,
-    @PrimaryKey(autoGenerate = true) @ColumnInfo(name = CardDao.ID, defaultValue = "NULL") var id: Long? = null,
+    @PrimaryKey @ColumnInfo(name = CardDao.ID, defaultValue = "NULL") val id: Long? = null
 ) {
 
 }
@@ -50,6 +53,20 @@ data class Card(
         return CardEntity(generation, value, group, position, calcFlags(highlight, faceDown, spread))
     }
 
+    fun copy(
+        generation: Long = this.generation,
+        value: Int = this.value,
+        group: Int = this.group,
+        position: Int = this.position,
+        highlight: Int = this.highlight,
+        faceDown: Boolean = this.faceDown,
+        spread: Boolean = this.spread
+    ): Card {
+        return Card(generation, value, group, position, _flags).also {
+            _flags.value = calcFlags(highlight, faceDown, spread)
+        }
+    }
+
     val flags: Int
         get() = _flags.value
 
@@ -65,12 +82,19 @@ data class Card(
     val spread: Boolean
         get() = (_flags.value and SPREAD) != 0
 
-    fun from(entity: CardEntity): Card {
+    fun from(entity: CardEntity, highlight: Int = entity.flags): Card {
         if (value != entity.value)
             throw IllegalArgumentException("Entity must be for the same card")
         return Card(entity.generation, entity.value, entity.group, entity.position, _flags).also {
-            it._flags.value = entity.flags
+            it._flags.value = (entity.flags and HIGHLIGHT_MASK.inv()) or
+                (highlight and HIGHLIGHT_MASK)
         }
+    }
+
+    fun from(highlight: HighlightEntity): Card {
+        if (value != highlight.card)
+            throw IllegalArgumentException("Entity must be for the same card")
+        return copy(highlight = highlight.highlight)
     }
 
     override fun toString(): String {
@@ -140,6 +164,16 @@ abstract class CardDao {
     abstract suspend fun clearRedo(generation: Long)
 
     /**
+     * Clear any undos before a generation
+     * @param generation The redo to start clearing
+     */
+    @Transaction()
+    @Query("DELETE FROM $TABLE WHERE $ID in (SELECT $ID FROM $TABLE JOIN" +
+        "(SELECT $VALUE t_value, MAX($GENERATION) t_gen FROM $TABLE WHERE $GENERATION <= :generation + 1 GROUP BY $VALUE)" +
+        " WHERE $VALUE = t_value AND $GENERATION < t_gen)")
+    abstract suspend fun clearUndo(generation: Long)
+
+    /**
      * Add a list of card at a specific generation
      * @param list The list of cards
      */
@@ -154,7 +188,7 @@ abstract class CardDao {
       */
     @RewriteQueriesToDropUnusedColumns
     @Query("SELECT * FROM $TABLE JOIN" +
-        "(SELECT $VALUE t_value, MAX($GENERATION) t_gen FROM $TABLE WHERE $GENERATION <= :generation GROUP BY $VALUE ORDER BY $VALUE, $GENERATION)" +
+        "(SELECT $VALUE t_value, MAX($GENERATION) t_gen FROM $TABLE WHERE $GENERATION <= :generation GROUP BY $VALUE)" +
         " WHERE $VALUE = t_value AND $GENERATION = t_gen ORDER BY $VALUE")
     abstract suspend fun getAllGeneration(generation: Long): List<Card>
 
@@ -165,7 +199,7 @@ abstract class CardDao {
     @RewriteQueriesToDropUnusedColumns
     @Query("SELECT * FROM $TABLE JOIN " +
         "(SELECT $VALUE t_value, MAX($GENERATION) t_gen FROM $TABLE" +
-        " WHERE $VALUE in (SELECT $VALUE FROM $TABLE WHERE $GENERATION = :generation) AND $GENERATION < :generation GROUP BY $VALUE ORDER BY $VALUE, $GENERATION)" +
+        " WHERE $VALUE in (SELECT $VALUE FROM $TABLE WHERE $GENERATION = :generation) AND $GENERATION < :generation GROUP BY $VALUE)" +
         " WHERE $VALUE = t_value AND $GENERATION = t_gen ORDER BY $VALUE")
     abstract suspend fun undo(generation: Long): List<CardEntity>
 
@@ -176,6 +210,13 @@ abstract class CardDao {
     @RewriteQueriesToDropUnusedColumns
     @Query("SELECT * FROM $TABLE WHERE $GENERATION = :generation")
     abstract suspend fun redo(generation: Long): List<CardEntity>
+
+    @Query("SELECT MAX(t_gen) FROM" +
+        " (SELECT MIN($GENERATION) t_gen FROM $TABLE GROUP BY $VALUE)")
+    abstract suspend fun minGeneration(): Long?
+
+    @Query("SELECT MAX($GENERATION) FROM $TABLE")
+    abstract suspend fun maxGeneration(): Long?
 
     companion object {
         const val ID = "card_id"
