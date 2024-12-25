@@ -224,14 +224,12 @@ object CardGroup {
             )
         else
             Modifier
-        Box {
-            AsyncImage(
-                resourcePath,
-                contentDescription = "",
-                contentScale = ContentScale.Fit,
-                modifier = combinedModifier,
-                colorFilter = filter,
-            )
-        }
+        AsyncImage(
+            resourcePath,
+            contentDescription = "",
+            contentScale = ContentScale.Fit,
+            modifier = combinedModifier,
+            colorFilter = filter,
+        )
     }
 }
