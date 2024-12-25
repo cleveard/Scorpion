@@ -291,9 +291,9 @@ class ScorpionGame(private val dealer: Dealer, private val bundle: Bundle) : Gam
         var pos = to.size
         for (i in card.position until from.size) {
             if (i < moveEnd)
-                dealer.cardChanged(from[i]!!.toEntity(generation = generation, group = toGroup, position = pos++))
+                dealer.cardChanged(from[i]!!.toEntity(generation = generation, group = toGroup, position = pos++, highlight = Card.HIGHLIGHT_NONE))
             else
-                dealer.cardChanged(from[i]!!.toEntity(generation = generation, position = i - 1))
+                dealer.cardChanged(from[i]!!.toEntity(generation = generation, position = i - 1, highlight = Card.HIGHLIGHT_NONE))
         }
     }
 

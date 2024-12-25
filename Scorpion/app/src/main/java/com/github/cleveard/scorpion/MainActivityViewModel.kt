@@ -85,6 +85,7 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
             val list = game.deal(this)
             CardDatabase.db.newGeneration(game.name, list, 0L)
             updateCards(cardDeck, list)
+            cardGroups.forEach { it.clear() }
             setCards(cardDeck)
             highlightCards.clear()
             generation.value = 0L
@@ -323,6 +324,7 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
                 CardDatabase.db.getCardDao().maxGeneration()?.let { dbMaxGeneration ->
                     if (state.generation in dbMinGeneration..dbMaxGeneration) {
                         CardDatabase.db.loadGame(state.generation)?.let { pair ->
+                            cardGroups.forEach { it.clear() }
                             setCards(pair.first)
                             pair.first.forEach { cardDeck[it.value] = it }
                             highlightCards.clear()
