@@ -9,10 +9,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
@@ -30,6 +33,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import com.github.cleveard.scorpion.db.CardDatabase
 import com.github.cleveard.scorpion.ui.Dealer
 import com.github.cleveard.scorpion.ui.theme.ScorpionTheme
@@ -107,12 +111,14 @@ fun ToolContent(landscape: Boolean, dealer: Dealer?) {
             dealer?.scope?.launch {
                 dealer.deal()
             }
-        }
+        },
+        contentPadding = PaddingValues(4.dp),
+        modifier = Modifier.defaultMinSize(1.dp, 1.dp)
     ) {
         Icon(
             imageVector = Icons.Default.PlayArrow,
             contentDescription = "",
-            Modifier.size(BAR_HEIGHT - Dp(4.0f))
+            Modifier.size(BAR_HEIGHT - 8.dp)
         )
     }
     Button(
@@ -120,12 +126,14 @@ fun ToolContent(landscape: Boolean, dealer: Dealer?) {
             dealer?.scope?.launch {
                 dealer.gameVariants()
             }
-        }
+        },
+        contentPadding = PaddingValues(4.dp),
+        modifier = Modifier.defaultMinSize(1.dp, 1.dp)
     ) {
         Icon(
             imageVector = Icons.Default.Add,
             contentDescription = "",
-            Modifier.size(BAR_HEIGHT - Dp(4.0f))
+            Modifier.size(BAR_HEIGHT - 8.dp)
         )
     }
     Button(
@@ -134,12 +142,14 @@ fun ToolContent(landscape: Boolean, dealer: Dealer?) {
                 dealer.undo()
             }
         },
-        enabled = dealer?.canUndo() != false
+        enabled = dealer?.canUndo() != false,
+        contentPadding = PaddingValues(4.dp),
+        modifier = Modifier.defaultMinSize(1.dp, 1.dp)
     ) {
         Icon(
             imageVector = ImageVector.vectorResource(R.drawable.undo_svgrepo_com),
             contentDescription = "",
-            Modifier.size(BAR_HEIGHT - Dp(4.0f))
+            Modifier.size(BAR_HEIGHT - 8.dp)
         )
     }
     Button(
@@ -148,12 +158,14 @@ fun ToolContent(landscape: Boolean, dealer: Dealer?) {
                 dealer.redo()
             }
         },
-        enabled = dealer?.canRedo() != false
+        enabled = dealer?.canRedo() != false,
+        contentPadding = PaddingValues(4.dp),
+        modifier = Modifier.defaultMinSize(1.dp, 1.dp)
     ) {
         Icon(
             imageVector = ImageVector.vectorResource(R.drawable.redo_svgrepo_com),
             contentDescription = "",
-            Modifier.size(BAR_HEIGHT - Dp(4.0f))
+            Modifier.size(BAR_HEIGHT - 8.dp)
         )
     }
 }
