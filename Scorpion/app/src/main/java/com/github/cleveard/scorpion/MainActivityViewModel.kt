@@ -334,10 +334,11 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
                         } ?: deal()
                         changedCards.clear()
                         game.checkGameOver(cardDeck, state.generation)
-                    }
+                    } else
+                        null
                 }
             }
-        }
+        }?: deal()
     }
 
     private fun removeTails(startGroup: Int, size: Int, endGroup: Int) {
