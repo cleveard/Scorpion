@@ -9,9 +9,11 @@ import com.github.cleveard.scorpion.ui.widgets.LayoutMeasurements
 
 interface Game: Actions {
     val measurements: LayoutMeasurements
-    val cardBackAssetName: String
+    val cardBackAssetPath: String
     val name: String
     val groupCount: Int
+
+    fun cardFrontAssetPath(value: Int): String
 
     suspend fun deal(shuffled: IntArray): List<CardEntity>
 
@@ -24,7 +26,7 @@ interface Game: Actions {
 
     fun getFilter(highlight: Int): ColorFilter?
 
-    fun checkGameOver(list: List<Card>, generation: Long)
+    suspend fun checkGameOver(list: List<Card>, generation: Long)
 
     fun isValid(cards: List<Card>, card: Card, lastCard: Card?): String?
 

@@ -10,9 +10,14 @@ interface Dealer {
     val scope: CoroutineScope
     val game: Game
     val cards: List<List<Card?>>
+    val cardBackAssetPath: String
+    val cardWidth: Int
+    val cardHeight: Int
     var showAlert: (@Composable () -> Unit)?
+    fun cardFrontAssetPath(value: Int): String
     suspend fun deal()
     suspend fun gameVariants()
+    suspend fun settings()
     fun findCard(cardValue: Int): Card
     suspend fun <T> withUndo(action: suspend (generation: Long) -> T): T
     fun cardChanged(card: CardEntity)
@@ -21,6 +26,7 @@ interface Dealer {
     fun canRedo(): Boolean
     suspend fun undo(): List<CardEntity>?
     suspend fun redo(): List<CardEntity>?
-    fun showNewGameOrDismissAlert(text: Int)
+    suspend fun showDialog(title: Int, vararg buttons: Int, content: @Composable () -> Unit): Int
+    suspend fun showNewGameOrDismissAlert(text: Int, title: Int = 0)
 }
 

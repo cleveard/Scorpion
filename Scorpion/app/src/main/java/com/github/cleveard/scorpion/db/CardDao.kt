@@ -30,9 +30,7 @@ data class CardEntity(
     @ColumnInfo(name = CardDao.POSITION) val position: Int,
     @ColumnInfo(name = CardDao.FLAGS) val flags: Int,
     @PrimaryKey @ColumnInfo(name = CardDao.ID, defaultValue = "NULL") val id: Long? = null
-) {
-
-}
+)
 
 data class Card(
     @ColumnInfo(name = CardDao.GENERATION) val generation: Long,

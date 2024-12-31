@@ -1,4 +1,4 @@
-package com.github.cleveard.scorpion.ui.games.Scorpion
+package com.github.cleveard.scorpion.ui.games.scorpion
 
 import android.os.Bundle
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -12,8 +12,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.MutableState
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.BlendMode
@@ -42,13 +40,16 @@ class ScorpionGame(private val dealer: Dealer, private val bundle: Bundle) : Gam
         horizontalSpacing.minimum = Dp(0.3f * 160.0f)
         horizontalSpacing.ratio = 0.15f
     }
-    private val cardBack: MutableState<String> = mutableStateOf("red.svg")
-    override val cardBackAssetName: String
-        get() = cardBack.value
+    override val cardBackAssetPath: String
+        get() = dealer.cardBackAssetPath
     override val name: String
         get() = ScorpionGame::class.qualifiedName!!
     override val groupCount: Int
         get() = COLUMN_COUNT + 1
+
+    override fun cardFrontAssetPath(value: Int): String {
+        return dealer.cardFrontAssetPath(value)
+    }
 
     override suspend fun deal(shuffled: IntArray): List<CardEntity> {
         val list = mutableListOf<CardEntity>()
@@ -71,8 +72,8 @@ class ScorpionGame(private val dealer: Dealer, private val bundle: Bundle) : Gam
 
     @Composable
     override fun Content(modifier: Modifier) {
-        measurements.verticalSpacing.size = CardGroup.cardHeight.dp
-        measurements.horizontalSpacing.size = CardGroup.cardWitdh.dp
+        measurements.verticalSpacing.size = dealer.cardHeight.dp
+        measurements.horizontalSpacing.size = dealer.cardWidth.dp
 
         BoxWithConstraints(
             modifier = modifier
@@ -178,12 +179,14 @@ class ScorpionGame(private val dealer: Dealer, private val bundle: Bundle) : Gam
         }
     }
 
-    override fun checkGameOver(list: List<Card>, generation: Long) {
+    override suspend fun checkGameOver(list: List<Card>, generation: Long) {
         var last: Card? = null
         var empty = 0
         var kings = 0
         val kitty = mutableListOf<Card>()
-        for (c in list.sortedWith(compareBy( { it.group }, { -it.position }))) {
+        val sorted = list.sortedWith(compareBy( { it.group }, { -it.position }))
+        for (i in sorted.indices) {
+            val c = sorted[i]
             if (c.group != COLUMN_COUNT) {
                 if (last?.group != c.group) {
                     if (c.faceDown)
@@ -196,7 +199,8 @@ class ScorpionGame(private val dealer: Dealer, private val bundle: Bundle) : Gam
                 if (c.group != (last?.group?: -1))
                     ++empty
                 if ((c.value % Game.CARDS_PER_SUIT) == Game.CARDS_PER_SUIT - 1 && c.faceUp &&
-                    (c.position > 0 || (list[c.value - 1].let { it.group != c.group || it.position != 1 }))
+                    (c.position > 0 || (i > 0 &&
+                        sorted[i - 1].let { it.group == c.group && it.value + 1 != c.value }))
                 ) {
                     ++kings
                 }
@@ -219,12 +223,12 @@ class ScorpionGame(private val dealer: Dealer, private val bundle: Bundle) : Gam
                 val g = list[s].group
                 for (c in 0 until Game.CARDS_PER_SUIT) {
                     if (list[s + c].let { it.group != g || it.position != Game.CARDS_PER_SUIT - 1 - c }) {
-                        dealer.showNewGameOrDismissAlert(R.string.game_over)
+                        dealer.showNewGameOrDismissAlert(R.string.no_moves, R.string.game_over)
                         return
                     }
                 }
             }
-            dealer.showNewGameOrDismissAlert(R.string.game_won)
+            dealer.showNewGameOrDismissAlert(R.string.game_won, R.string.congratulations)
             return
         }
 

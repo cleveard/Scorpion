@@ -1,8 +1,15 @@
 <resources>
     <string name="app_name">Scorpion</string>
-    <string name="game_over">No more moves are available. Start a new game or dismiss the dialog and use undo to continue playing.</string>
+    <string name="no_moves">No more moves are available. Start a new game or dismiss the dialog and use undo to continue playing.</string>
     <string name="new_game">New Game</string>
     <string name="dismiss">Dismiss</string>
     <string name="database_inconsistency">An inconsistency in the data base was detected. Start a new game or dismiss and debug. See the Logcat for details</string>
     <string name="game_won">Congratulations! You won the game.</string>
+    <string name="allow_undo_for_flips">Allow undo of card flips</string>
+    <string name="accept">Accept</string>
+    <string name="settings">Settings</string>
+    <string name="congratulations">Congratulations</string>
+    <string name="game_over">Game Over</string>
+    <string name="error">Error</string>
+    <string name="card_back_image">Back of Card Image</string>
 </resources>

@@ -7,6 +7,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
@@ -63,13 +65,15 @@ class MainActivity : ComponentActivity() {
 fun ScorpionPreview(dealer: Dealer? = null) {
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
-    ScorpionTheme {
+    ScorpionTheme(dynamicColor = false) {
         BoxWithConstraints(
             modifier = Modifier.fillMaxWidth()
                 .fillMaxHeight()
                 .background(Color(0xff277714))
         ) {
-            dealer?.showAlert?.invoke()
+            Box {
+                dealer?.showAlert?.invoke()
+            }
 
             if (landscape) {
                 Column(
@@ -164,6 +168,21 @@ fun ToolContent(landscape: Boolean, dealer: Dealer?) {
     ) {
         Icon(
             imageVector = ImageVector.vectorResource(R.drawable.redo_svgrepo_com),
+            contentDescription = "",
+            Modifier.size(BAR_HEIGHT - 8.dp)
+        )
+    }
+    Button(
+        onClick = {
+            dealer?.scope?.launch {
+                dealer.settings()
+            }
+        },
+        contentPadding = PaddingValues(4.dp),
+        modifier = Modifier.defaultMinSize(1.dp, 1.dp)
+    ) {
+        Icon(
+            imageVector = Icons.Default.Settings,
             contentDescription = "",
             Modifier.size(BAR_HEIGHT - 8.dp)
         )

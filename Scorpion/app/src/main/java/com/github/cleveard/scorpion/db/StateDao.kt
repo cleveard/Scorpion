@@ -59,10 +59,10 @@ data class StateEntity(
         }
 
         fun bundleToBlob(value: Bundle): ByteArray? {
-            val parcel = Parcel.obtain()
-            return if (value.keySet().isNotEmpty())
+            return if (value.keySet().isEmpty())
                 null
             else {
+                val parcel = Parcel.obtain()
                 parcel.writeBundle(value)
                 parcel.marshall().also {
                     parcel.recycle()
