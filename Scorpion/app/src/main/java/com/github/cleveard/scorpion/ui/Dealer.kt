@@ -28,6 +28,6 @@ interface Dealer {
     suspend fun undo(): List<CardEntity>?
     suspend fun redo(): List<CardEntity>?
     suspend fun showDialog(title: Int, vararg buttons: Int, content: @Composable () -> Unit): Int
-    suspend fun showNewGameOrDismissAlert(text: Int, title: Int = 0)
+    suspend fun showNewGameOrDismissAlert(text: Int, title: Int = 0, plural: Int? = null, vararg args: Any)
 }
 

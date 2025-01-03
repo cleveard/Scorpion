@@ -41,11 +41,14 @@ class ScorpionGame(private val dealer: Dealer, private val bundle: Bundle) : Gam
     private val cardLayout: CardLayout = CardLayout()
     private val padding: Dp = Dp(2.0f)
     private val showHighlights: MutableState<Boolean> = mutableStateOf(bundle.getBoolean(SHOW_HIGHLIGHTS, true))
+    private var cheatCount: Int = 0
     private var cheatCardFlip: Boolean = false
+    private var cheatMoveCard: Boolean = false
 
     private val settingsContent = object: DialogContent {
         val showHints = mutableStateOf(false)
         var cheatFlip = mutableStateOf(false)
+        var cheatMove = mutableStateOf(false)
         @Composable
         override fun Content(modifier: Modifier) {
             HorizontalDivider()
@@ -65,6 +68,12 @@ class ScorpionGame(private val dealer: Dealer, private val bundle: Bundle) : Gam
                 R.string.cheat_card_flip,
                 onChange = { cheatFlip.value = it }
             )
+            HorizontalDivider()
+            TextSwitch(
+                cheatMove.value,
+                R.string.cheat_move_card,
+                onChange = { cheatMove.value = it }
+            )
         }
 
         override fun onDismiss() {
@@ -72,6 +81,7 @@ class ScorpionGame(private val dealer: Dealer, private val bundle: Bundle) : Gam
 
         override fun onAccept() {
             cheatCardFlip = cheatFlip.value
+            cheatMoveCard = cheatMove.value
 
             var update = false
             update = (showHints.value != showHighlights.value).also {
@@ -86,6 +96,7 @@ class ScorpionGame(private val dealer: Dealer, private val bundle: Bundle) : Gam
         fun reset() {
             showHints.value = showHighlights.value
             cheatFlip.value = cheatCardFlip
+            cheatMove.value = cheatMoveCard
         }
     }
 
@@ -192,14 +203,14 @@ class ScorpionGame(private val dealer: Dealer, private val bundle: Bundle) : Gam
         return filters[highlight]
     }
 
-    override fun isClickable(card: Card): Boolean {
+    fun isClickable(card: Card, withCheat: Boolean): Boolean {
         return when {
             card.faceDown -> {
                 if (card.group == dealer.cards.kitty)
-                    card.spread || cheatCardFlip
+                    card.spread || (withCheat && cheatCardFlip)
                 else
                     card.position == dealer.cards[card.group].lastIndex ||
-                        (cheatCardFlip && dealer.cards[card.group][card.position + 1]?.faceUp != false)
+                        (withCheat && cheatCardFlip && dealer.cards[card.group][card.position + 1]?.faceUp != false)
             }
             else -> true
         }
@@ -208,11 +219,14 @@ class ScorpionGame(private val dealer: Dealer, private val bundle: Bundle) : Gam
     override fun onClick(card: Card) {
         dealer.scope.launch {
             withUndo { generation ->
-                if (isClickable(card)) {
+                if (isClickable(card, true)) {
+                    val cheating = if (isClickable(card, false)) 1 else 0
                     val highlight = card.highlight
                     if (card.faceDown) {
                         dealer.cardChanged(card.toEntity(generation = generation, faceDown = false, spread = true))
+                        cheatCount += cheating
                         cheatCardFlip = false
+                        cheatMoveCard = false
                     } else if (highlight != HIGHLIGHT_ONE_LOWER || !checkAndMove(card, generation)) {
                         if (highlight != HIGHLIGHT_SELECTED) {
                             highlight(card, HIGHLIGHT_SELECTED)
@@ -225,8 +239,11 @@ class ScorpionGame(private val dealer: Dealer, private val bundle: Bundle) : Gam
                                     highlight(it, HIGHLIGHT_ONE_HIGHER)
                             }
                         }
-                    } else
+                    } else {
+                        cheatCount += cheating
                         cheatCardFlip = false
+                        cheatMoveCard = false
+                    }
                 }
             }
         }
@@ -290,7 +307,7 @@ class ScorpionGame(private val dealer: Dealer, private val bundle: Bundle) : Gam
                     }
                 }
             }
-            dealer.showNewGameOrDismissAlert(R.string.game_won, R.string.congratulations)
+            dealer.showNewGameOrDismissAlert(R.plurals.game_won, R.string.congratulations)
             return
         }
 
@@ -321,9 +338,20 @@ class ScorpionGame(private val dealer: Dealer, private val bundle: Bundle) : Gam
             if (card.position != 0 || moveAlone) {
                 for (empty in 0 until dealer.cards.lastIndex) {
                     if (dealer.cards[empty].isEmpty()) {
-                        moveCards(card, empty, generation, moveAlone)
+                        moveCards(card, empty, -1, generation, moveAlone)
+                        cheatCardFlip = false
+                        cheatMoveCard = false
                         return true
                     }
+                }
+            }
+            findOneLower(card.value)?.let {
+                if (cheatMoveCard && it.faceUp && (it.group != card.group || it.position != card.position + 1)) {
+                    ++cheatCount
+                    moveCards(card, it.group, it.position, generation, true)
+                    cheatCardFlip = false
+                    cheatMoveCard = false
+                    return true
                 }
             }
         } else {
@@ -331,8 +359,13 @@ class ScorpionGame(private val dealer: Dealer, private val bundle: Bundle) : Gam
                 val to = dealer.cards[it.group]
                 val c = to[it.position]
                 if (it.group != card.group && it.position == to.lastIndex && c!!.faceUp) {
-                    moveCards(card, it.group, generation, card.group == dealer.cards.kitty)
+                    moveCards(card, it.group, -1, generation, card.group == dealer.cards.kitty)
                     return true
+                } else if (cheatMoveCard && it.faceUp) {
+                    ++cheatCount
+                    moveCards(card, it.group, it.position + 1, generation, true)
+                    cheatCardFlip = false
+                    cheatMoveCard = false
                 }
             }
         }
@@ -345,21 +378,42 @@ class ScorpionGame(private val dealer: Dealer, private val bundle: Bundle) : Gam
             dealer.cardChanged(card.toEntity(highlight = highlight))
     }
 
-    private fun moveCards(card: Card, toGroup: Int, generation: Long, single: Boolean) {
-        if (card.group == toGroup)
-            throw IllegalArgumentException("Can only move between different groups")
+    private fun moveCards(card: Card, toGroup: Int, toPos: Int, generation: Long, single: Boolean) {
         val from = dealer.cards[card.group]
         val to = dealer.cards[toGroup]
-        val moveEnd = if (single)
-            card.position + 1
-        else
-            from.size
-        var pos = to.size
-        for (i in card.position until from.size) {
-            if (i < moveEnd)
-                dealer.cardChanged(from[i]!!.toEntity(generation = generation, group = toGroup, position = pos++, highlight = Card.HIGHLIGHT_NONE))
+        var pos = if (toPos >= 0) toPos else to.size
+        if (card.group == toGroup) {
+            val moveStart: Int
+            val moveEnd: Int
+            val bump: Int
+            if (pos < card.position) {
+                moveStart = pos
+                moveEnd = card.position
+                bump = 1
+            } else if (pos > card.position) {
+                --pos
+                moveStart = card.position
+                moveEnd = pos
+                bump = -1
+            } else
+                return          // Moving to same position, do nothing
+            for (i in moveStart .. moveEnd)
+                dealer.cardChanged(from[i]!!.let { it.toEntity(generation = generation, group = toGroup, position = it.position + bump, highlight = Card.HIGHLIGHT_NONE) })
+            dealer.cardChanged(card.toEntity(generation = generation, group = toGroup, position = pos, highlight = Card.HIGHLIGHT_NONE))
+        } else {
+            val moveEnd = if (single)
+                card.position + 1
             else
-                dealer.cardChanged(from[i]!!.toEntity(generation = generation, position = i - 1, highlight = Card.HIGHLIGHT_NONE))
+                from.size
+            val moveCount = moveEnd - card.position
+            for (i in pos until to.size)
+                dealer.cardChanged(to[i]!!.let { it.toEntity(generation = generation, group = toGroup, position = it.position + moveCount, highlight = Card.HIGHLIGHT_NONE) })
+            for (i in card.position until from.size) {
+                if (i < moveEnd)
+                    dealer.cardChanged(from[i]!!.toEntity(generation = generation, group = toGroup, position = pos++, highlight = Card.HIGHLIGHT_NONE))
+                else
+                    dealer.cardChanged(from[i]!!.toEntity(generation = generation, position = i - 1, highlight = Card.HIGHLIGHT_NONE))
+            }
         }
     }
 

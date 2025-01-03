@@ -44,6 +44,7 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.BlendModeColorFilter
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -458,11 +459,14 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
         } else
             null
 
-    override suspend fun showNewGameOrDismissAlert(text: Int, title:Int) {
+    override suspend fun showNewGameOrDismissAlert(text: Int, title:Int, plural: Int?, vararg args: Any) {
         viewModelScope.launch {
             val result = showDialog(title, R.string.dismiss, R.string.new_game) {
                 Text(
-                    text = stringResource(text)
+                    text = if (plural == null)
+                        stringResource(text, *args)
+                    else
+                        pluralStringResource(text, plural, *args)
                 )
             }
 

@@ -4,7 +4,12 @@
     <string name="new_game">New Game</string>
     <string name="dismiss">Dismiss</string>
     <string name="database_inconsistency">An inconsistency in the data base was detected. Start a new game or dismiss and debug. See the Logcat for details</string>
-    <string name="game_won">Congratulations! You won the game.</string>
+    <plurals name="game_won">
+        <item quantity="zero">Congratulations! You won the game.</item>
+        <item quantity="one">Congratulations! You won the game and only cheated once.</item>
+        <item quantity="two">Congratulations! You won the game and only cheated twice.</item>
+        <item quantity="other">Congratulations! You won the game and only cheated %1$d times.</item>
+    </plurals>
     <string name="allow_undo_for_flips">You can to undo turning over a card that was facedown.</string>
     <string name="accept">Accept</string>
     <string name="settings">Settings</string>
@@ -15,5 +20,6 @@
     <string name="show_highlights">Show highlights for the card above (red) and below (green) the selected card.</string>
     <string name="use_system_theme">Use your perosnalized colors</string>
     <string name="cheats">Cheats</string>
-    <string name="cheat_card_flip">Cheat by flipping a face down card in the kitty, or a facedown card below a face up card.</string>
+    <string name="cheat_card_flip">Cheat by flipping the top face down card in any stack.</string>
+    <string name="cheat_move_card">Cheat by moving a card to the middle of a stack. Kings are moved before the corresponding queen.</string>
 </resources>
