@@ -65,7 +65,7 @@ class MainActivity : ComponentActivity() {
 fun ScorpionPreview(dealer: Dealer? = null) {
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
-    ScorpionTheme(dynamicColor = false) {
+    ScorpionTheme(dynamicColor = dealer?.useSystemTheme?: false) {
         BoxWithConstraints(
             modifier = Modifier.fillMaxWidth()
                 .fillMaxHeight()

@@ -5,11 +5,15 @@
     <string name="dismiss">Dismiss</string>
     <string name="database_inconsistency">An inconsistency in the data base was detected. Start a new game or dismiss and debug. See the Logcat for details</string>
     <string name="game_won">Congratulations! You won the game.</string>
-    <string name="allow_undo_for_flips">Allow undo of card flips</string>
+    <string name="allow_undo_for_flips">You can to undo turning over a card that was facedown.</string>
     <string name="accept">Accept</string>
     <string name="settings">Settings</string>
     <string name="congratulations">Congratulations</string>
     <string name="game_over">Game Over</string>
     <string name="error">Error</string>
     <string name="card_back_image">Back of Card Image</string>
+    <string name="show_highlights">Show highlights for the card above (red) and below (green) the selected card.</string>
+    <string name="use_system_theme">Use your perosnalized colors</string>
+    <string name="cheats">Cheats</string>
+    <string name="cheat_card_flip">Cheat by flipping a face down card in the kitty, or a facedown card below a face up card.</string>
 </resources>

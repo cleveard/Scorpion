@@ -3,6 +3,7 @@ agp = "8.6.1"
 coilSvg = "3.0.3"
 constraintlayout = "2.2.0"
 constraintlayoutCompose = "1.1.0"
+constraintlayoutComposeVersion = "1.0.1"
 kotlin = "2.0.21"
 kotlinKsp = "2.0.21-1.0.27"
 coreKtx = "1.15.0"
@@ -17,6 +18,7 @@ room = "2.6.1"
 [libraries]
 androidx-constraintlayout = { module = "androidx.constraintlayout:constraintlayout", version.ref = "constraintlayout" }
 androidx-constraintlayout-compose = { module = "androidx.constraintlayout:constraintlayout-compose", version.ref = "constraintlayoutCompose" }
+androidx-constraintlayout-compose-v101 = { module = "androidx.constraintlayout:constraintlayout-compose", version.ref = "constraintlayoutComposeVersion" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }

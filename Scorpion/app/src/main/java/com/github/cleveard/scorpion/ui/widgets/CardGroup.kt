@@ -42,7 +42,7 @@ object CardGroup {
             val imageModifier = Modifier.size(game.measurements.horizontalSpacing.size * game.measurements.scale,
                 game.measurements.verticalSpacing.size * game.measurements.scale)
             for (card in cards) {
-                if (card?.spread != false || card == cards.last()) {
+                if (card == null || card.position == cards.lastIndex || cards[card.position + 1]?.spread != false) {
                     GetImage(
                         card,
                         game,
@@ -69,7 +69,7 @@ object CardGroup {
                 val imageModifier = Modifier.size(game.measurements.horizontalSpacing.size * game.measurements.scale,
                     game.measurements.verticalSpacing.size * game.measurements.scale)
                 for (card in cards) {
-                    if (card?.spread != false || card.position == cards.lastIndex) {
+                    if (card == null || card.position == cards.lastIndex || cards[card.position + 1]?.spread != false) {
                         GetImage(
                             card,
                             game,
@@ -98,13 +98,10 @@ object CardGroup {
             filter = game.getFilter(card.highlight)
             game.cardFrontAssetPath(card.value)
         }
-        val combinedModifier = if (game.isClickable(card))
-            Modifier.combinedClickable(
+        val combinedModifier = Modifier.combinedClickable(
                 onClick = { game.onClick(card) },
                 onDoubleClick = { game.onDoubleClick(card) }
             )
-        else
-            Modifier
         AsyncImage(
             resourcePath,
             contentDescription = "",

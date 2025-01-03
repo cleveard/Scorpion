@@ -11,6 +11,7 @@ interface Dealer {
     val game: Game
     val cards: List<List<Card?>>
     val cardBackAssetPath: String
+    val useSystemTheme: Boolean
     val cardWidth: Int
     val cardHeight: Int
     var showAlert: (@Composable () -> Unit)?
@@ -21,7 +22,7 @@ interface Dealer {
     fun findCard(cardValue: Int): Card
     suspend fun <T> withUndo(action: suspend (generation: Long) -> T): T
     fun cardChanged(card: CardEntity)
-    fun onStateChanged(state: StateEntity)
+    fun onStateChanged()
     fun canUndo(): Boolean
     fun canRedo(): Boolean
     suspend fun undo(): List<CardEntity>?

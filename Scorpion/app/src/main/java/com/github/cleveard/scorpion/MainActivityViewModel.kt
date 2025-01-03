@@ -2,9 +2,11 @@ package com.github.cleveard.scorpion
 
 import android.app.Application
 import android.content.Context
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -62,6 +64,7 @@ import com.github.cleveard.scorpion.ui.Game
 import com.github.cleveard.scorpion.ui.Dealer
 import com.github.cleveard.scorpion.ui.DialogContent
 import com.github.cleveard.scorpion.ui.games.scorpion.ScorpionGame
+import com.github.cleveard.scorpion.ui.widgets.TextSwitch
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlin.coroutines.resume
@@ -92,6 +95,9 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
     private val _cardBack: MutableState<String> = mutableStateOf(BACK_ASSET_PATH + "red.svg")
     override val cardBackAssetPath: String
         get() = _cardBack.value
+    private val _useSystemTheme: MutableState<Boolean> = mutableStateOf(false)
+    override val useSystemTheme: Boolean
+        get() = _useSystemTheme.value
     override val cardWidth: Int
         get() = MainActivityViewModel.cardWidth
     override val cardHeight: Int
@@ -136,6 +142,7 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
     override suspend fun settings() {
         val selectedPath = mutableStateOf(cardBackAssetPath)
         val undoFlips = mutableStateOf(undoCardFlips.value)
+        val systemTheme = mutableStateOf(useSystemTheme)
         val gameContent: DialogContent? = game.settingsContent()
         val value = showDialog(R.string.settings, R.string.dismiss, R.string.accept) {
             val width = Dp(.4f * 160.0f)
@@ -179,24 +186,33 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
                 }
             }
 
-            gameContent?.Content(modifier = Modifier)
+            HorizontalDivider(
+                modifier = Modifier.padding(top = 4.dp)
+            )
 
-            Row {
-                Checkbox(
-                    undoFlips.value,
-                    onCheckedChange = { undoFlips.value = it },
-                    modifier = Modifier.align(Alignment.CenterVertically)
-                )
-                Text(
-                    stringResource(R.string.allow_undo_for_flips),
-                    modifier = Modifier.align(Alignment.CenterVertically)
+            TextSwitch(
+                undoFlips.value,
+                R.string.allow_undo_for_flips,
+                onChange = { undoFlips.value = it }
+            )
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                HorizontalDivider()
+
+                TextSwitch(
+                    systemTheme.value,
+                    R.string.use_system_theme,
+                    onChange = { systemTheme.value = it }
                 )
             }
+
+            gameContent?.Content(modifier = Modifier)
         }
 
         if (value == R.string.accept) {
             var update = updateState(_cardBack, selectedPath, commonState.bundle) { putString(CARD_BACK_IMAGE, it) }
             update = updateState(undoCardFlips, undoFlips, commonState.bundle) { putBoolean(ALLOW_UNDO_FOR_FLIPS, it) } || update
+            update = updateState(_useSystemTheme, systemTheme, commonState.bundle ) { putBoolean(USE_SYSTEM_THEME, it) } || update
             if (update) {
                 commonState.onBundleUpdated()
                 CardDatabase.db.getStateDao().update(commonState.game, commonState.state)
@@ -230,7 +246,7 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
         highlightCards[card.value] = HighlightEntity(card.value, highlight)
     }
 
-    override fun onStateChanged(state: StateEntity) {
+    override fun onStateChanged() {
         gameState.onBundleUpdated()
         viewModelScope.launch {
             CardDatabase.db.getStateDao().update(gameState.game, gameState.state)
@@ -583,6 +599,7 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
     private fun setState(bundle: Bundle) {
         _cardBack.value = bundle.getString(CARD_BACK_IMAGE, BACK_ASSET_PATH + "red.svg")
         undoCardFlips.value = bundle.getBoolean(ALLOW_UNDO_FOR_FLIPS, false)
+        _useSystemTheme.value = bundle.getBoolean(USE_SYSTEM_THEME, false)
     }
 
     fun initialize(callback: () -> Unit) {
@@ -621,6 +638,7 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
         private const val GAME_NAME_KEY = "game_name"
         private const val CARD_BACK_IMAGE = "card_back_image"
         private const val ALLOW_UNDO_FOR_FLIPS = "allow_undo_for_card_flips"
+        private const val USE_SYSTEM_THEME = "use_system_theme"
         private val DEFAULT_GAME = ScorpionGame::class.qualifiedName!!
         private val COMMON_STATE_NAME = MainActivityViewModel::class.qualifiedName!!
         var cardWidth: Int = 234

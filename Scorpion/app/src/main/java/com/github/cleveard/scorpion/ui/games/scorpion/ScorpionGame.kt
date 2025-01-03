@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -11,13 +12,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.BlendModeColorFilter
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.github.cleveard.scorpion.R
@@ -28,11 +34,60 @@ import com.github.cleveard.scorpion.ui.DialogContent
 import com.github.cleveard.scorpion.ui.Game
 import com.github.cleveard.scorpion.ui.widgets.CardGroup
 import com.github.cleveard.scorpion.ui.widgets.LayoutMeasurements
+import com.github.cleveard.scorpion.ui.widgets.TextSwitch
 import kotlinx.coroutines.launch
 
 class ScorpionGame(private val dealer: Dealer, private val bundle: Bundle) : Game {
     private val cardLayout: CardLayout = CardLayout()
     private val padding: Dp = Dp(2.0f)
+    private val showHighlights: MutableState<Boolean> = mutableStateOf(bundle.getBoolean(SHOW_HIGHLIGHTS, true))
+    private var cheatCardFlip: Boolean = false
+
+    private val settingsContent = object: DialogContent {
+        val showHints = mutableStateOf(false)
+        var cheatFlip = mutableStateOf(false)
+        @Composable
+        override fun Content(modifier: Modifier) {
+            HorizontalDivider()
+            TextSwitch(
+                showHints.value,
+                R.string.show_highlights,
+                onChange = { showHints.value = it }
+            )
+
+            Spacer(Modifier.height(8.dp))
+            Text(
+                stringResource(R.string.cheats)
+            )
+            HorizontalDivider(Modifier.padding(top = 4.dp))
+            TextSwitch(
+                cheatFlip.value,
+                R.string.cheat_card_flip,
+                onChange = { cheatFlip.value = it }
+            )
+        }
+
+        override fun onDismiss() {
+        }
+
+        override fun onAccept() {
+            cheatCardFlip = cheatFlip.value
+
+            var update = false
+            update = (showHints.value != showHighlights.value).also {
+                showHighlights.value = showHints.value
+                bundle.putBoolean(SHOW_HIGHLIGHTS, showHints.value)
+            } || update
+
+            if (update)
+                dealer.onStateChanged()
+        }
+
+        fun reset() {
+            showHints.value = showHighlights.value
+            cheatFlip.value = cheatCardFlip
+        }
+    }
 
     override val measurements: LayoutMeasurements = LayoutMeasurements().apply {
         verticalSpacing.minimum = Dp(0.3f * 160.0f)
@@ -127,10 +182,13 @@ class ScorpionGame(private val dealer: Dealer, private val bundle: Bundle) : Gam
     }
 
     override fun settingsContent(): DialogContent? {
-        return null
+        settingsContent.reset()
+        return settingsContent
     }
 
     override fun getFilter(highlight: Int): ColorFilter? {
+        if (highlight != HIGHLIGHT_SELECTED && !showHighlights.value)
+            return null
         return filters[highlight]
     }
 
@@ -138,9 +196,10 @@ class ScorpionGame(private val dealer: Dealer, private val bundle: Bundle) : Gam
         return when {
             card.faceDown -> {
                 if (card.group == dealer.cards.kitty)
-                    card.spread
+                    card.spread || cheatCardFlip
                 else
-                    card.position == dealer.cards[card.group].lastIndex
+                    card.position == dealer.cards[card.group].lastIndex ||
+                        (cheatCardFlip && dealer.cards[card.group][card.position + 1]?.faceUp != false)
             }
             else -> true
         }
@@ -152,7 +211,8 @@ class ScorpionGame(private val dealer: Dealer, private val bundle: Bundle) : Gam
                 if (isClickable(card)) {
                     val highlight = card.highlight
                     if (card.faceDown) {
-                        dealer.cardChanged(card.toEntity(generation = generation, faceDown = false))
+                        dealer.cardChanged(card.toEntity(generation = generation, faceDown = false, spread = true))
+                        cheatCardFlip = false
                     } else if (highlight != HIGHLIGHT_ONE_LOWER || !checkAndMove(card, generation)) {
                         if (highlight != HIGHLIGHT_SELECTED) {
                             highlight(card, HIGHLIGHT_SELECTED)
@@ -165,7 +225,8 @@ class ScorpionGame(private val dealer: Dealer, private val bundle: Bundle) : Gam
                                     highlight(it, HIGHLIGHT_ONE_HIGHER)
                             }
                         }
-                    }
+                    } else
+                        cheatCardFlip = false
                 }
             }
         }
@@ -174,7 +235,8 @@ class ScorpionGame(private val dealer: Dealer, private val bundle: Bundle) : Gam
     override fun onDoubleClick(card: Card) {
         dealer.scope.launch {
             withUndo {generation ->
-                checkAndMove(card, generation)
+                if (checkAndMove(card, generation))
+                    cheatCardFlip = false
             }
         }
     }
@@ -331,6 +393,9 @@ class ScorpionGame(private val dealer: Dealer, private val bundle: Bundle) : Gam
         const val HIGHLIGHT_SELECTED: Int  = 1
         const val HIGHLIGHT_ONE_LOWER: Int  = 2
         const val HIGHLIGHT_ONE_HIGHER: Int  = 3
+
+        const val SHOW_HIGHLIGHTS: String = "show_highlights"
+        const val CHEAT_CARD_FLIP: String = "cheat_card_flip"
 
         val <T> List<T>.kitty: Int
             get() = lastIndex
