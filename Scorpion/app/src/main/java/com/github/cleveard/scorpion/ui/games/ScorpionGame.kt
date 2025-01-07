@@ -15,6 +15,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,6 +65,68 @@ class ScorpionGame(
     private var hiddenCardColumnCount: Int = state.bundle.getInt(HIDDEN_CARD_COLUMN_COUNT, 3)
     private var kingMovesAlone: Boolean = state.bundle.getBoolean(KING_MOVES_ALONE, true)
 
+    private val variantContent = object: DialogContent {
+        val moveKitty = mutableStateOf(false)
+        val hiddenCards = mutableIntStateOf(3)
+        val kingMoves = mutableStateOf(true)
+        @Composable
+        override fun Content(modifier: Modifier) {
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 4.dp))
+            TextSwitch(
+                !moveKitty.value,
+                R.string.move_kitty_when_flipped,
+                onChange = { moveKitty.value = !it }
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 4.dp))
+            TextSwitch(
+                hiddenCards.intValue == 3,
+                R.string.hidden_cards_3_columns,
+                onChange = { hiddenCards.intValue = if (it) 3 else 4 }
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 4.dp))
+            TextSwitch(
+                kingMoves.value,
+                R.string.king_moves_alone,
+                onChange = { kingMoves.value = it }
+            )
+        }
+
+        override suspend fun onDismiss() {
+        }
+
+        override suspend fun onAccept() {
+            var update = (moveKittyWhenFlipped != moveKitty.value).also {
+                if (it) {
+                    moveKittyWhenFlipped = moveKitty.value
+                    state.bundle.putBoolean(MOVE_KITTY_WHEN_FLIPPED, moveKittyWhenFlipped)
+                }
+            }
+            update = (hiddenCardColumnCount != hiddenCards.value).also {
+                if (it) {
+                    hiddenCardColumnCount = hiddenCards.value
+                    state.bundle.putInt(HIDDEN_CARD_COLUMN_COUNT, hiddenCardColumnCount)
+                }
+            } || update
+            update = (kingMovesAlone != kingMoves.value).also {
+                if (it) {
+                    kingMovesAlone = kingMoves.value
+                    state.bundle.putBoolean(KING_MOVES_ALONE, kingMovesAlone)
+                }
+            }
+
+            if (update)
+                dealer.onStateChanged(state)
+        }
+
+        override fun reset() {
+            moveKitty.value = moveKittyWhenFlipped
+            hiddenCards.intValue = hiddenCardColumnCount
+            kingMoves.value = kingMovesAlone
+        }
+    }
+
     private val settingsContent = object: DialogContent {
         val showHints = mutableStateOf(false)
         var cheatFlip = mutableStateOf(false)
@@ -104,8 +167,10 @@ class ScorpionGame(
 
             var update = false
             update = (showHints.value != showHighlights.value).also {
-                showHighlights.value = showHints.value
-                state.bundle.putBoolean(SHOW_HIGHLIGHTS, showHints.value)
+                if (it) {
+                    showHighlights.value = showHints.value
+                    state.bundle.putBoolean(SHOW_HIGHLIGHTS, showHints.value)
+                }
             } || update
 
             if (update)
@@ -199,7 +264,7 @@ class ScorpionGame(
     }
 
     override fun variantContent(): DialogContent? {
-        return null
+        return variantContent
     }
 
     override fun settingsContent(): DialogContent {
@@ -234,8 +299,8 @@ class ScorpionGame(
                         if (moveKittyWhenFlipped) {
                             if (dealer.cards[KITTY_GROUP][0]!!.spread) {
                                 for (c in dealer.cards[KITTY_GROUP]) {
-                                    val group = KITTY_COUNT - 1 - card.position
-                                    card.changed(generation = generation, group = group, position = dealer.cards[group].size, faceDown = false, spread = true)
+                                    val group = KITTY_COUNT - 1 - c!!.position
+                                    c.changed(generation = generation, group = group, position = dealer.cards[group].size, faceDown = false, spread = true)
                                 }
                             } else {
                                 val group = KITTY_COUNT - 1 - card.position
