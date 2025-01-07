@@ -4,11 +4,11 @@
     <string name="new_game">New Game</string>
     <string name="dismiss">Dismiss</string>
     <string name="database_inconsistency">An inconsistency in the data base was detected. Start a new game or dismiss and debug. See the Logcat for details</string>
+    <string name="game_won">Congratulations! You won the game.</string>
     <plurals name="game_won">
-        <item quantity="zero">Congratulations! You won the game.</item>
+        <item quantity="zero">@string/game_won</item>
         <item quantity="one">Congratulations! You won the game and only cheated once.</item>
-        <item quantity="two">Congratulations! You won the game and only cheated twice.</item>
-        <item quantity="other">Congratulations! You won the game and only cheated %1$d times.</item>
+        <item quantity="other">Congratulations! You won the game and cheated %1$d times.</item>
     </plurals>
     <string name="allow_undo_for_flips">You can to undo turning over a card that was facedown.</string>
     <string name="accept">Accept</string>
@@ -22,4 +22,7 @@
     <string name="cheats">Cheats</string>
     <string name="cheat_card_flip">Cheat by flipping the top face down card in any stack.</string>
     <string name="cheat_move_card">Cheat by moving a card to the middle of a stack. Kings are moved before the corresponding queen.</string>
+    <string name="game_played">Game Played</string>
+    <string name="scorpion">Scorpion</string>
+    <string name="available_games">Available Games</string>
 </resources>

@@ -9,7 +9,7 @@ import androidx.room.RoomDatabase
 import androidx.room.Transaction
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
-import com.github.cleveard.scorpion.ui.Game
+import com.github.cleveard.scorpion.ui.games.Game
 import java.io.IOException
 
 class Converters {
@@ -43,7 +43,7 @@ abstract class CardDatabase: RoomDatabase() {
         return getCardDao().getAllGeneration(generation).toMutableList().let {cards ->
             val highlight = db.getHighlightDao().get()
             // Sanity check game
-            if (cards.size == Game.CARD_COUNT && cards.allWithIndices {i, card -> i == card.value })
+            if (cards.size == Game.CARD_COUNT && cards.allWithIndices { i, card -> i == card.value })
                 Pair(cards, highlight)
             else
                 null

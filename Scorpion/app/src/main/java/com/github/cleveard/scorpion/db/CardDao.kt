@@ -11,7 +11,7 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.RewriteQueriesToDropUnusedColumns
 import androidx.room.Transaction
-import com.github.cleveard.scorpion.ui.Game
+import com.github.cleveard.scorpion.ui.games.Game
 
 @Entity(
     tableName = CardDao.TABLE,

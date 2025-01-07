@@ -24,7 +24,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialogDefaults
 import androidx.compose.material3.BasicAlertDialog
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -61,15 +60,16 @@ import com.github.cleveard.scorpion.db.Card
 import com.github.cleveard.scorpion.db.CardEntity
 import com.github.cleveard.scorpion.db.HighlightEntity
 import com.github.cleveard.scorpion.db.StateEntity
-import com.github.cleveard.scorpion.ui.Game
+import com.github.cleveard.scorpion.ui.games.Game
 import com.github.cleveard.scorpion.ui.Dealer
 import com.github.cleveard.scorpion.ui.DialogContent
-import com.github.cleveard.scorpion.ui.games.scorpion.ScorpionGame
+import com.github.cleveard.scorpion.ui.widgets.TextRadioButton
 import com.github.cleveard.scorpion.ui.widgets.TextSwitch
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
+import kotlin.reflect.KClass
 
 private const val LOG_TAG: String = "CardLog"
 
@@ -89,6 +89,8 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
 
     override val scope: CoroutineScope
         get() = viewModelScope
+
+    private val games: MutableList<Game> = mutableListOf()
 
     private lateinit var _game: MutableState<Game>
     override val game: Game
@@ -115,7 +117,6 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
         get() = cardGroups
 
     private lateinit var commonState: StateEntity
-    private lateinit var gameState: StateEntity
 
     override fun cardFrontAssetPath(value: Int): String {
         return FRONT_ASSET_PATH + frontIds[value]
@@ -137,7 +138,50 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
     }
 
     override suspend fun gameVariants() {
-        deal()
+        val gameList = games.map {
+            Triple(
+                getApplication<Application>().resources.getString(it.displayNameId),
+                it,
+                it.variantContent()?.apply { reset() }
+            )
+        }.sortedBy { it.first }
+        val selectedGame = mutableStateOf(gameList.firstOrNull { it.second == game }!!)
+
+        val value = showDialog(R.string.game_played, R.string.dismiss, R.string.new_game) {
+            Text(
+                stringResource(R.string.available_games),
+                modifier = Modifier.padding(vertical = 4.dp)
+            )
+            Column(
+                modifier = Modifier.border(width = 1.dp, Color.Black)
+                    .padding(horizontal = 4.dp)
+                    .fillMaxWidth()
+            ) {
+                gameList.forEach {
+
+                    TextRadioButton(
+                        selectedGame.value.second == it.second,
+                        it.second.displayNameId,
+                        modifier = Modifier.padding(vertical = 4.dp),
+                        onChange = { selectedGame.value = it }
+                    )
+                }
+            }
+
+            selectedGame.value.third?.Content(modifier = Modifier)
+        }
+
+        if (value == R.string.new_game) {
+            if (game != selectedGame.value.second) {
+                commonState.bundle.putString(GAME_NAME_KEY, selectedGame.value.second.name)
+                commonState.onBundleUpdated()
+                CardDatabase.db.getStateDao().update(commonState.game, commonState.state)
+                _game.value = selectedGame.value.second
+            }
+            selectedGame.value.third?.onAccept()
+            deal()
+        } else
+            selectedGame.value.third?.onDismiss()
     }
 
     override suspend fun settings() {
@@ -145,6 +189,7 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
         val undoFlips = mutableStateOf(undoCardFlips.value)
         val systemTheme = mutableStateOf(useSystemTheme)
         val gameContent: DialogContent? = game.settingsContent()
+        gameContent?.reset()
         val value = showDialog(R.string.settings, R.string.dismiss, R.string.accept) {
             val width = Dp(.4f * 160.0f)
             val height = width * (cardHeight.toFloat() / cardWidth.toFloat())
@@ -234,7 +279,7 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
 
     override fun findCard(cardValue: Int): Card = cardDeck[cardValue]
 
-    override fun cardChanged(card: CardEntity) {
+    override fun cardChanged(card: CardEntity): Int {
         val changed = cardDeck[card.value].let {
             it.group != card.group || it.position != card.position ||
                 it.flags and Card.HIGHLIGHT_MASK.inv() != card.flags and Card.HIGHLIGHT_MASK.inv()
@@ -245,13 +290,12 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
             changedCards.remove(card.value)
         val highlight = card.flags and Card.HIGHLIGHT_MASK
         highlightCards[card.value] = HighlightEntity(card.value, highlight)
+        return changedCards.size
     }
 
-    override fun onStateChanged() {
-        gameState.onBundleUpdated()
-        viewModelScope.launch {
-            CardDatabase.db.getStateDao().update(gameState.game, gameState.state)
-        }
+    override suspend fun onStateChanged(state: StateEntity) {
+        state.onBundleUpdated()
+        CardDatabase.db.getStateDao().update(state.game, state.state)
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
@@ -557,28 +601,19 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
         removeTails(lastGroup, lastPosition, cardGroups.size)
     }
 
-    private suspend fun makeGame(className: String): Game? {
-        val cardsValid = ::gameState.isInitialized
-        if (!cardsValid)
-            gameState = StateEntity(0L, "", Bundle())
-        if (className == gameState.game)
-            return game
-
-        val oldGame = gameState
-        gameState = CardDatabase.db.getStateDao().get(className)?: run {
+    private suspend fun makeGame(clazz: KClass<out Game>): Game? {
+        val className = clazz.qualifiedName!!
+        val newState = CardDatabase.db.getStateDao().get(className)?: run {
             StateEntity(0L, className, Bundle()).also {
                 CardDatabase.db.getStateDao().insert(it)
             }
         }
 
         try {
-            val clazz = Class.forName(className)
-            val constructor = clazz.getConstructor(Dealer::class.java, Bundle::class.java)
+            val constructor = clazz.java.getConstructor(Dealer::class.java, StateEntity::class.java)
 
             try {
-                val g = constructor.newInstance(this, gameState.bundle)
-                if (g is Game)
-                    return g
+                return constructor.newInstance(this, newState)
             } catch (_: Exception) {
             }
         } catch (_: ClassNotFoundException) {
@@ -586,18 +621,7 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
         } catch (_: SecurityException) {
         }
 
-        gameState = oldGame
         return null
-    }
-
-    private suspend fun newGame(name: String): Game ? {
-        return makeGame(name)?.also {g ->
-            if (g.name != commonState.bundle.getString(GAME_NAME_KEY)) {
-                commonState.bundle.putString(GAME_NAME_KEY, g.name)
-                commonState.onBundleUpdated()
-                CardDatabase.db.getStateDao().update(COMMON_STATE_NAME, commonState.state)
-            }
-        }
     }
 
     private fun setState(bundle: Bundle) {
@@ -609,6 +633,15 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
     fun initialize(callback: () -> Unit) {
         viewModelScope.launch {
             CardDatabase.db.withTransaction {
+                Game::class.sealedSubclasses.forEach {clazz ->
+                    makeGame(clazz)?.let {
+                        games.add(it)
+                    }
+                }
+
+                if (games.isEmpty())
+                    throw IllegalStateException("No game to be played")
+
                 val stateDao = CardDatabase.db.getStateDao()
                 preloadCards(getApplication())
                 if (!::commonState.isInitialized) {
@@ -619,14 +652,10 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
                     }
                 }
                 setState(commonState.bundle)
-                val name = commonState.bundle.getString(GAME_NAME_KEY, DEFAULT_GAME)
-                val nextGame = newGame(name) ?: run {
-                    newGame(DEFAULT_GAME)!!.also {
-                        if (name != DEFAULT_GAME) {
-                            CardDatabase.db.getCardDao().deleteAll()
-                        }
-                    }
-                }
+                val nextGame = commonState.bundle.getString(GAME_NAME_KEY)?.let {name ->
+                    games.firstOrNull { it.name == name }
+                }?: games.firstOrNull { it.name.endsWith(DEFAULT_GAME) }
+                ?: games[0]
                 if (::_game.isInitialized)
                     _game.value = nextGame
                 else
@@ -643,7 +672,7 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
         private const val CARD_BACK_IMAGE = "card_back_image"
         private const val ALLOW_UNDO_FOR_FLIPS = "allow_undo_for_card_flips"
         private const val USE_SYSTEM_THEME = "use_system_theme"
-        private val DEFAULT_GAME = ScorpionGame::class.qualifiedName!!
+        private const val DEFAULT_GAME = ".ScorpionGame"
         private val COMMON_STATE_NAME = MainActivityViewModel::class.qualifiedName!!
         var cardWidth: Int = 234
             private set

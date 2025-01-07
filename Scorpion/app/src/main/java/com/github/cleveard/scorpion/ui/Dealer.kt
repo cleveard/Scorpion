@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import com.github.cleveard.scorpion.db.Card
 import com.github.cleveard.scorpion.db.CardEntity
 import com.github.cleveard.scorpion.db.StateEntity
+import com.github.cleveard.scorpion.ui.games.Game
 import kotlinx.coroutines.CoroutineScope
 
 interface Dealer {
@@ -21,8 +22,8 @@ interface Dealer {
     suspend fun settings()
     fun findCard(cardValue: Int): Card
     suspend fun <T> withUndo(action: suspend (generation: Long) -> T): T
-    fun cardChanged(card: CardEntity)
-    fun onStateChanged()
+    fun cardChanged(card: CardEntity): Int
+    suspend fun onStateChanged(state: StateEntity)
     fun canUndo(): Boolean
     fun canRedo(): Boolean
     suspend fun undo(): List<CardEntity>?

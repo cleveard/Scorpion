@@ -1,6 +1,5 @@
 package com.github.cleveard.scorpion.ui.widgets
 
-import android.content.Context
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -14,14 +13,9 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
-import coil3.Image
 import coil3.compose.AsyncImage
-import coil3.imageLoader
-import coil3.request.ImageRequest
 import com.github.cleveard.scorpion.db.Card
-import com.github.cleveard.scorpion.ui.Game
-import kotlin.coroutines.resume
-import kotlin.coroutines.suspendCoroutine
+import com.github.cleveard.scorpion.ui.games.Game
 
 /**
  * TODO: document your custom view class.

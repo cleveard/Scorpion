@@ -7,7 +7,9 @@ interface DialogContent {
     @Composable
     fun Content(modifier: Modifier)
 
-    fun onDismiss()
+    suspend fun onDismiss()
 
-    fun onAccept()
+    suspend fun onAccept()
+
+    fun reset()
 }
