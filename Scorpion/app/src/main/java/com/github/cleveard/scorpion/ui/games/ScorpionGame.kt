@@ -28,7 +28,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.github.cleveard.scorpion.R
 import com.github.cleveard.scorpion.db.Card
-import com.github.cleveard.scorpion.db.CardEntity
 import com.github.cleveard.scorpion.db.StateEntity
 import com.github.cleveard.scorpion.ui.Actions
 import com.github.cleveard.scorpion.ui.Dealer
@@ -191,20 +190,22 @@ class ScorpionGame(
         return dealer.cardFrontAssetPath(value)
     }
 
-    override suspend fun deal(shuffled: IntArray): List<CardEntity> {
-        val list = mutableListOf<CardEntity>()
+    override suspend fun deal(shuffled: IntArray): List<Card> {
+        val list = mutableListOf<Card>()
         val iterator = shuffled.iterator()
         for (group in 0 until COLUMN_COUNT) {
             for (position in 0 until CARDS_PER_COLUMN) {
                 val card = iterator.next()
-                list.add(CardEntity(0L, card, group, position, Card.calcFlags(
-                    faceDown = group < hiddenCardColumnCount && position < CARDS_FACE_DOWN, spread = true)))
+                list.add(
+                    Card(0L, card, group, position, Card.calcFlags(
+                        faceDown = group < hiddenCardColumnCount && position < CARDS_FACE_DOWN, spread = true))
+                )
             }
         }
         var position = 0
         while (iterator.hasNext()) {
             val card = iterator.next()
-            list.add(CardEntity(0L, card, KITTY_GROUP, position++, Card.calcFlags(faceDown = true)))
+            list.add(Card(0L, card, KITTY_GROUP, position++, Card.calcFlags(faceDown = true)))
         }
 
         cheatCount = 0
@@ -428,7 +429,7 @@ class ScorpionGame(
         faceDown: Boolean = this.faceDown,
         spread: Boolean = this.spread
     ) {
-        cardChangeCount = dealer.cardChanged(toEntity(
+        cardChangeCount = dealer.cardChanged(copy(
             generation = generation,
             value = value,
             group = group,

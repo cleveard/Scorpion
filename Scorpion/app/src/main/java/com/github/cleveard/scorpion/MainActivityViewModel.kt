@@ -31,7 +31,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -57,7 +56,6 @@ import coil3.imageLoader
 import coil3.request.ImageRequest
 import com.github.cleveard.scorpion.db.CardDatabase
 import com.github.cleveard.scorpion.db.Card
-import com.github.cleveard.scorpion.db.CardEntity
 import com.github.cleveard.scorpion.db.HighlightEntity
 import com.github.cleveard.scorpion.db.StateEntity
 import com.github.cleveard.scorpion.ui.games.Game
@@ -76,7 +74,7 @@ private const val LOG_TAG: String = "CardLog"
 class MainActivityViewModel(application: Application): AndroidViewModel(application), Dealer {
     private val cardDeck: MutableList<Card> = mutableListOf<Card>().apply {
         repeat(Game.CARD_COUNT) {
-            add(Card(0, it, 0, 0, mutableIntStateOf(0)))
+            add(Card(0, it, 0, 0, 0))
         }
     }
 
@@ -109,7 +107,7 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
     private var minGeneration: MutableState<Long> = mutableLongStateOf(0L)
     private var maxGeneration: MutableState<Long> = mutableLongStateOf(0L)
     private var undoCardFlips: MutableState<Boolean> = mutableStateOf(true)
-    private val changedCards: MutableMap<Int, CardEntity> = mutableMapOf()
+    private val changedCards: MutableMap<Int, Card> = mutableMapOf()
     private val highlightCards: MutableMap<Int, HighlightEntity> = mutableMapOf()
     private var undoNesting: Int = 0
 
@@ -279,7 +277,7 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
 
     override fun findCard(cardValue: Int): Card = cardDeck[cardValue]
 
-    override fun cardChanged(card: CardEntity): Int {
+    override fun cardChanged(card: Card): Int {
         val changed = cardDeck[card.value].let {
             it.group != card.group || it.position != card.position ||
                 it.flags and Card.HIGHLIGHT_MASK.inv() != card.flags and Card.HIGHLIGHT_MASK.inv()
@@ -401,14 +399,18 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
     private fun clearHighlight(list: MutableList<Card>, clear: List<HighlightEntity>) {
         clear.forEach {
             if (!highlightCards.contains(it.card)) {
-                list[it.card] = list[it.card].copy(highlight = Card.HIGHLIGHT_NONE)
+                val next = list[it.card].copy(highlight = Card.HIGHLIGHT_NONE)
+                list[it.card] = next
+                cardGroups[next.group][next.position] = next
             }
         }
     }
 
     private fun setHighlight(list: MutableList<Card>, set: Collection<HighlightEntity>) {
         set.forEach {
-            list[it.card] = list[it.card].copy(highlight = it.highlight)
+            val next = list[it.card].copy(highlight = it.highlight)
+            list[it.card] = next
+            cardGroups[next.group][next.position] = next
         }
     }
 
@@ -437,7 +439,7 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
                             var cardFlip = false
                             if (changedCards.isNotEmpty()) {
                                 val list = ArrayList<Card>().apply { addAll(cardDeck) }
-                                val newCards = mutableMapOf<Int, CardEntity>()
+                                val newCards = mutableMapOf<Int, Card>()
                                 if (changedCards.isNotEmpty()) {
                                     while (changedCards.isNotEmpty()) {
                                         cardFlip = cardFlip || changedCards.values.any { cardDeck[it.value].faceDown && (it.flags and Card.FACE_DOWN) == 0  }
@@ -484,7 +486,7 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
 
     override fun canRedo(): Boolean = generation.value < maxGeneration.value
 
-    override suspend fun undo(): List<CardEntity>? =
+    override suspend fun undo(): List<Card>? =
         if (generation.value > minGeneration.value) {
             CardDatabase.db.undo(game.name, generation.value)?.also {
                 updateGame(it)
@@ -493,7 +495,7 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
         } else
             null
 
-    override suspend fun redo(): List<CardEntity>? =
+    override suspend fun redo(): List<Card>? =
         if (generation.value < maxGeneration.value) {
             CardDatabase.db.redo(game.name, generation.value + 1)?.also {
                 updateGame(it)
@@ -519,13 +521,13 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
         }
     }
 
-    private fun updateCards(list: MutableList<Card>, changed: Collection<CardEntity>) {
+    private fun updateCards(list: MutableList<Card>, changed: Collection<Card>) {
         for (c in changed) {
-            list[c.value] = list[c.value].from(c)
+            list[c.value] = c.copy()
         }
     }
 
-    private fun updateGame(list: List<CardEntity>) {
+    private fun updateGame(list: List<Card>) {
         clearHighlight(cardDeck, highlightCards.values.toList().also { highlightCards.clear() })
         updateCards(cardDeck, list)
         setCards(cardDeck)

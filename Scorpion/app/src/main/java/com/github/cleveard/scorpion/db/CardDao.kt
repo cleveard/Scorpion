@@ -1,6 +1,5 @@
 package com.github.cleveard.scorpion.db
 
-import androidx.compose.runtime.MutableState
 import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Entity
@@ -23,33 +22,14 @@ import com.github.cleveard.scorpion.ui.games.Game
         )
     ]
 )
-data class CardEntity(
-    @ColumnInfo(name = CardDao.GENERATION) val generation: Long,
-    @ColumnInfo(name = CardDao.VALUE) val value: Int,
-    @ColumnInfo(name = CardDao.GROUP) val group: Int,
-    @ColumnInfo(name = CardDao.POSITION) val position: Int,
-    @ColumnInfo(name = CardDao.FLAGS) val flags: Int,
-    @PrimaryKey @ColumnInfo(name = CardDao.ID, defaultValue = "NULL") val id: Long? = null
-)
-
 data class Card(
     @ColumnInfo(name = CardDao.GENERATION) val generation: Long,
     @ColumnInfo(name = CardDao.VALUE) val value: Int,
     @ColumnInfo(name = CardDao.GROUP) val group: Int,
     @ColumnInfo(name = CardDao.POSITION) val position: Int,
-    @ColumnInfo(name = CardDao.FLAGS) private val _flags: MutableState<Int>
+    @ColumnInfo(name = CardDao.FLAGS) val flags: Int
 ) {
-    fun toEntity(
-        generation: Long = this.generation,
-        value: Int = this.value,
-        group: Int = this.group,
-        position: Int = this.position,
-        highlight: Int = this.highlight,
-        faceDown: Boolean = this.faceDown,
-        spread: Boolean = this.spread
-    ): CardEntity {
-        return CardEntity(generation, value, group, position, calcFlags(highlight, faceDown, spread))
-    }
+    @PrimaryKey @ColumnInfo(name = CardDao.ID, defaultValue = "NULL") var id: Long? = null
 
     fun copy(
         generation: Long = this.generation,
@@ -60,40 +40,20 @@ data class Card(
         faceDown: Boolean = this.faceDown,
         spread: Boolean = this.spread
     ): Card {
-        return Card(generation, value, group, position, _flags).also {
-            _flags.value = calcFlags(highlight, faceDown, spread)
-        }
+        return Card(generation, value, group, position, calcFlags(highlight, faceDown, spread))
     }
 
-    val flags: Int
-        get() = _flags.value
-
     val faceDown: Boolean
-        get() = (_flags.value and FACE_DOWN) != 0
+        get() = (flags and FACE_DOWN) != 0
 
     val faceUp: Boolean
         get() = !faceDown
 
     val highlight: Int
-        get() = _flags.value and HIGHLIGHT_MASK
+        get() = flags and HIGHLIGHT_MASK
 
     val spread: Boolean
-        get() = (_flags.value and SPREAD) != 0
-
-    fun from(entity: CardEntity, highlight: Int = entity.flags): Card {
-        if (value != entity.value)
-            throw IllegalArgumentException("Entity must be for the same card")
-        return Card(entity.generation, entity.value, entity.group, entity.position, _flags).also {
-            it._flags.value = (entity.flags and HIGHLIGHT_MASK.inv()) or
-                (highlight and HIGHLIGHT_MASK)
-        }
-    }
-
-    fun from(highlight: HighlightEntity): Card {
-        if (value != highlight.card)
-            throw IllegalArgumentException("Entity must be for the same card")
-        return copy(highlight = highlight.highlight)
-    }
+        get() = (flags and SPREAD) != 0
 
     override fun toString(): String {
         val suit = when (value / Game.CARDS_PER_SUIT) {
@@ -144,7 +104,7 @@ abstract class CardDao {
      * Insert a card
      */
     @Insert(onConflict = OnConflictStrategy.ABORT)
-    protected abstract suspend fun insert(card: List<CardEntity>)
+    protected abstract suspend fun insert(card: List<Card>)
 
     /**
      * Clear the table
@@ -176,7 +136,7 @@ abstract class CardDao {
      * @param list The list of cards
      */
     @Transaction()
-    open suspend fun addAll(list: Collection<CardEntity>) {
+    open suspend fun addAll(list: Collection<Card>) {
         insert(list.map { it.copy(flags = it.flags and Card.HIGHLIGHT_MASK.inv())})
     }
 
@@ -199,7 +159,7 @@ abstract class CardDao {
         "(SELECT $VALUE t_value, MAX($GENERATION) t_gen FROM $TABLE" +
         " WHERE $VALUE in (SELECT $VALUE FROM $TABLE WHERE $GENERATION = :generation) AND $GENERATION < :generation GROUP BY $VALUE)" +
         " WHERE $VALUE = t_value AND $GENERATION = t_gen ORDER BY $VALUE")
-    abstract suspend fun undo(generation: Long): List<CardEntity>
+    abstract suspend fun undo(generation: Long): List<Card>
 
     /**
      * Get the list of cards changed when a generation is redone
@@ -207,7 +167,7 @@ abstract class CardDao {
      */
     @RewriteQueriesToDropUnusedColumns
     @Query("SELECT * FROM $TABLE WHERE $GENERATION = :generation")
-    abstract suspend fun redo(generation: Long): List<CardEntity>
+    abstract suspend fun redo(generation: Long): List<Card>
 
     @Query("SELECT MAX(t_gen) FROM" +
         " (SELECT MIN($GENERATION) t_gen FROM $TABLE GROUP BY $VALUE)")

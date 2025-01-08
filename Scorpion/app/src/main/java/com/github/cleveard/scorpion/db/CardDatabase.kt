@@ -26,7 +26,7 @@ class Converters {
 
 @Database(
     entities = [
-        CardEntity::class,
+        Card::class,
         StateEntity::class,
         HighlightEntity::class
     ],
@@ -56,7 +56,7 @@ abstract class CardDatabase: RoomDatabase() {
     }
 
     @Transaction
-    open suspend fun undo(game: String, generation: Long): List<CardEntity>? {
+    open suspend fun undo(game: String, generation: Long): List<Card>? {
         if (generation <= 0)
             return null
         getStateDao().update(game, generation - 1)
@@ -64,13 +64,13 @@ abstract class CardDatabase: RoomDatabase() {
     }
 
     @Transaction
-    open suspend fun redo(game: String, generation: Long): List<CardEntity>? {
+    open suspend fun redo(game: String, generation: Long): List<Card>? {
         getStateDao().update(game, generation)
         return getCardDao().redo(generation)
     }
 
     @Transaction
-    open suspend fun newGeneration(game: String, cards: Collection<CardEntity>, generation: Long) {
+    open suspend fun newGeneration(game: String, cards: Collection<Card>, generation: Long) {
         val cardDao = getCardDao()
         val stateDao = getStateDao()
 

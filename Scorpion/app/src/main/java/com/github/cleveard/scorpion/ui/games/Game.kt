@@ -4,7 +4,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ColorFilter
 import com.github.cleveard.scorpion.db.Card
-import com.github.cleveard.scorpion.db.CardEntity
 import com.github.cleveard.scorpion.db.StateEntity
 import com.github.cleveard.scorpion.ui.Actions
 import com.github.cleveard.scorpion.ui.DialogContent
@@ -21,7 +20,7 @@ sealed class Game(
 
     abstract fun cardFrontAssetPath(value: Int): String
 
-    abstract suspend fun deal(shuffled: IntArray): List<CardEntity>
+    abstract suspend fun deal(shuffled: IntArray): List<Card>
 
     @Composable
     abstract fun Content(modifier: Modifier)
