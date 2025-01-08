@@ -208,6 +208,8 @@ class ScorpionGame(
         }
 
         cheatCount = 0
+        state.bundle.putInt(CHEAT_COUNT, cheatCount)
+        dealer.onStateChanged(state)
         return list
     }
 
@@ -471,6 +473,7 @@ class ScorpionGame(
                     if (cheatMoveCard && it.faceUp && (it.group != card.group || it.position != card.position + 1)) {
                         moveCards(card, it.group, it.position, generation, true)
                         cheated = true
+                        return true
                     }
                 }
             } else {
@@ -483,6 +486,7 @@ class ScorpionGame(
                     } else if (cheatMoveCard && it.faceUp) {
                         moveCards(card, it.group, it.position + 1, generation, true)
                         cheated = true
+                        return true
                     }
                 }
             }

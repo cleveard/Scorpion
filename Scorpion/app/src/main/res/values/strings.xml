@@ -10,7 +10,7 @@
         <item quantity="one">Congratulations! You won the game and only cheated once.</item>
         <item quantity="other">Congratulations! You won the game and cheated %1$d times.</item>
     </plurals>
-    <string name="allow_undo_for_flips">You can to undo turning over a card that was facedown.</string>
+    <string name="allow_undo_for_flips">You can undo turning over a card that was face down.</string>
     <string name="accept">Accept</string>
     <string name="settings">Settings</string>
     <string name="congratulations">Congratulations</string>
@@ -18,7 +18,7 @@
     <string name="error">Error</string>
     <string name="card_back_image">Back of Card Image</string>
     <string name="show_highlights">Show highlights for the card above (red) and below (green) the selected card.</string>
-    <string name="use_system_theme">Use your perosnalized colors</string>
+    <string name="use_system_theme">Use your personalized colors</string>
     <string name="cheats">Cheats</string>
     <string name="cheat_card_flip">Cheat by flipping the top face down card in any stack.</string>
     <string name="cheat_move_card">Cheat by moving a card to the middle of a stack. Kings are moved before the corresponding queen.</string>
