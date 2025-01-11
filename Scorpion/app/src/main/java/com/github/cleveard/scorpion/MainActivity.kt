@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
@@ -24,8 +23,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,15 +43,22 @@ import kotlinx.coroutines.launch
 
 private val BAR_HEIGHT: Dp = Dp(0.3f * 160.0f)
 
+/**
+ * The main activity for the application
+ */
 class MainActivity : ComponentActivity() {
+    /** The activity view model */
     private val viewModel by viewModels<MainActivityViewModel>()
 
+    /** @inheritDoc */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Initialize the card database
         CardDatabase.initialize(this.applicationContext)
+        // Initialize the view model
         viewModel.initialize {
-            // enableEdgeToEdge()
+            // Set the content of the application after the view model initializes
             setContent {
                 ScorpionPreview(viewModel)
             }
@@ -60,22 +66,32 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/**
+ * The application content
+ * @param dealer The dealer for the application. Set to null for Android Studio previews.
+ */
 @PreviewScreenSizes
 @Composable
 fun ScorpionPreview(dealer: Dealer? = null) {
+    // Determine current orientation
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
+    // Use the application theme.
     ScorpionTheme(dynamicColor = dealer?.useSystemTheme?: false) {
+        // We use BoxWithConstraints only to get the screen height and width
         BoxWithConstraints(
             modifier = Modifier.fillMaxWidth()
                 .fillMaxHeight()
                 .background(Color(0xff277714))
         ) {
+            // This box is used to show dialogs
             Box {
                 dealer?.showAlert?.invoke()
             }
 
+            // The toolbar placement depends on the orientation
             if (landscape) {
+                // In landscape mode the toolbar is a column on the end side
                 Column(
                     modifier = Modifier.align(Alignment.TopEnd)
                         .fillMaxHeight()
@@ -83,13 +99,16 @@ fun ScorpionPreview(dealer: Dealer? = null) {
                         .background(MaterialTheme.colorScheme.primaryContainer),
                     verticalArrangement = Arrangement.SpaceEvenly
                 ) {
+                    // Put tools into the toolbar
                     ToolContent(true, dealer)
                 }
+                // Let the game fill the rest of the screen area
                 dealer?.game?.Content(Modifier.align(Alignment.TopStart)
                     .fillMaxHeight()
                     .width(maxWidth - BAR_HEIGHT)
                 )
             } else {
+                // In portrait mode the tool bar is a row along the bottom of the screen
                 Row(
                     modifier = Modifier.align(Alignment.BottomStart)
                         .fillMaxWidth()
@@ -97,8 +116,10 @@ fun ScorpionPreview(dealer: Dealer? = null) {
                         .background(MaterialTheme.colorScheme.primaryContainer),
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
+                    // Put tools into the tool bar
                     ToolContent(false, dealer)
                 }
+                // Let the game fill the rest of the screen area
                 dealer?.game?.Content(Modifier.align(Alignment.TopStart)
                     .height(maxHeight - BAR_HEIGHT)
                     .fillMaxWidth()
@@ -108,8 +129,14 @@ fun ScorpionPreview(dealer: Dealer? = null) {
     }
 }
 
+/**
+ * The tools for the toolbar
+ * @param landscape True is the orientation is landscape
+ * @param dealer The application dealer
+ */
 @Composable
-fun ToolContent(landscape: Boolean, dealer: Dealer?) {
+fun ToolContent(@Suppress("UNUSED_PARAMETER") landscape: Boolean, dealer: Dealer?) {
+    // The deal a new game button
     Button(
         onClick = {
             dealer?.scope?.launch {
@@ -125,6 +152,7 @@ fun ToolContent(landscape: Boolean, dealer: Dealer?) {
             Modifier.size(BAR_HEIGHT - 8.dp)
         )
     }
+    // The show variants dialog button.
     Button(
         onClick = {
             dealer?.scope?.launch {
@@ -140,6 +168,7 @@ fun ToolContent(landscape: Boolean, dealer: Dealer?) {
             Modifier.size(BAR_HEIGHT - 8.dp)
         )
     }
+    // The undo button
     Button(
         onClick = {
             dealer?.scope?.launch {
@@ -156,6 +185,7 @@ fun ToolContent(landscape: Boolean, dealer: Dealer?) {
             Modifier.size(BAR_HEIGHT - 8.dp)
         )
     }
+    // The redo button
     Button(
         onClick = {
             dealer?.scope?.launch {
@@ -172,6 +202,7 @@ fun ToolContent(landscape: Boolean, dealer: Dealer?) {
             Modifier.size(BAR_HEIGHT - 8.dp)
         )
     }
+    // The settings button
     Button(
         onClick = {
             dealer?.scope?.launch {

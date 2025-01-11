@@ -29,7 +29,6 @@ import androidx.compose.ui.unit.dp
 import com.github.cleveard.scorpion.R
 import com.github.cleveard.scorpion.db.Card
 import com.github.cleveard.scorpion.db.StateEntity
-import com.github.cleveard.scorpion.ui.Actions
 import com.github.cleveard.scorpion.ui.Dealer
 import com.github.cleveard.scorpion.ui.DialogContent
 import com.github.cleveard.scorpion.ui.widgets.CardGroup
@@ -37,39 +36,102 @@ import com.github.cleveard.scorpion.ui.widgets.LayoutMeasurements
 import com.github.cleveard.scorpion.ui.widgets.TextSwitch
 import kotlinx.coroutines.launch
 
+/**
+ * Scorpion solitaire game
+ * @param dealer The dealer interface used by the game
+ * @param state The state entity for the game
+ * Scorpion lays out cards in 7 columns or 7 cards each. In the first 3 or 4
+ * columns the top 3 cards are face down. They cannot be played until all of
+ * the cards below them are moved, when they can be flipped over. The remaining 3
+ * cards are kept separately in a kitty face down, until no more plays
+ * are possible. When no more plays are possible the cards in the kitty
+ * are flipped and the game is continued until no more plays are possible.
+ *
+ * Cards are play on the last card of any column. The cord of the same suit
+ * that is one smaller than the last card or a column can be moved to that column.
+ * All cards below the moved card are moved with it. Kings can be moved to empty
+ * columns. Depending on the variant the king can move alone, or with the cards
+ * below it.
+ *
+ * You win with game by ordering the cards in four columns ace through king of the
+ * same suit.
+ *
+ * There are some variants to this game
+ *
+ *     The number of columns with face down cards can be 3 or 4
+ *
+ *     Kings can move to empty columns with our without the cards below them
+ *
+ *     The kitty cards are dealt to the first three columns when flipped, or
+ *     the are played where they are
+ *
+ * There are two cheats in the settings dialog. You can activate the cheats for one
+ * move and they will allow you to make plays that are not normally legal. Once a
+ * play is made, with ot without cheating, the cheat is cleared and you must set again.
+ *
+ *     One cheat allows you to flip cards that you normally wouldn't be able to -
+ *     cards in the kitty before play is finished, and top face down card in any column
+ *
+ *     The other cheat allows you to move a single card to the card one above it, even
+ *     if it isn't at the bottom of a column. Kings are moved above the corresponding queen.
+ */
 @Suppress("unused")
 class ScorpionGame(
     private val dealer: Dealer,
     state: StateEntity
 ): Game(
+    // Game state entity
     state,
+    // Layout measurements
     LayoutMeasurements().apply {
+        // Space vertically 15% minimum of .3 inches
         verticalSpacing.minimum = Dp(0.3f * 160.0f)
         verticalSpacing.ratio = 0.15f
+        // Space horizontally 15% minimum of .3 inches
         horizontalSpacing.minimum = Dp(0.3f * 160.0f)
         horizontalSpacing.ratio = 0.15f
     },
+    // Qualified class name
     ScorpionGame::class.qualifiedName!!,
+    // Number of groups for the game
     GROUP_COUNT,
+    // The display name for the game
     R.string.scorpion
-), Actions {
+) {
+    /** Padding around card groups */
     private val padding: Dp = Dp(2.0f)
+    /** Switch to show highlights for cards on below or above the selected card */
     private val showHighlights: MutableState<Boolean> = mutableStateOf(state.bundle.getBoolean(SHOW_HIGHLIGHTS, true))
+    /** The number of times the player has cheated in this game */
     private var cheatCount: Int = state.bundle.getInt(CHEAT_COUNT, 0)
+    /** Flag to indicate the player cheated on the last play */
     private var cheated: Boolean = false
+    /** The number of changed cards after the last card change request */
     private var cardChangeCount: Int = 0
+    /** Allow cheating by flipping a card illegally */
     private var cheatCardFlip: Boolean = false
+    /** Allow cheating by moving a card illegally */
     private var cheatMoveCard: Boolean = false
+    /** Flag to move the kitty cards to the first three columns when flipped */
     private var moveKittyWhenFlipped: Boolean = state.bundle.getBoolean(MOVE_KITTY_WHEN_FLIPPED, false)
+    /** Number of columns with face down cards in them */
     private var hiddenCardColumnCount: Int = state.bundle.getInt(HIDDEN_CARD_COLUMN_COUNT, 3)
+    /** Flag to move the alone to empty columns */
     private var kingMovesAlone: Boolean = state.bundle.getBoolean(KING_MOVES_ALONE, true)
 
+    /** Dialog content for the variant dialog */
     private val variantContent = object: DialogContent {
+        /** Current moveKittyWhenFlipped value */
         val moveKitty = mutableStateOf(false)
+        /** Current hiddenCardColumnCount value */
         val hiddenCards = mutableIntStateOf(3)
+        /** Current kindMovesAlone value  */
         val kingMoves = mutableStateOf(true)
+
+        /** @inheritDoc */
         @Composable
         override fun Content(modifier: Modifier) {
+            // Add checkbox for moving the kitty
             HorizontalDivider(modifier = Modifier.padding(horizontal = 4.dp))
             TextSwitch(
                 !moveKitty.value,
@@ -77,6 +139,7 @@ class ScorpionGame(
                 onChange = { moveKitty.value = !it }
             )
 
+            // Add checkbox for number of columns with face down cards
             HorizontalDivider(modifier = Modifier.padding(horizontal = 4.dp))
             TextSwitch(
                 hiddenCards.intValue == 3,
@@ -84,6 +147,7 @@ class ScorpionGame(
                 onChange = { hiddenCards.intValue = if (it) 3 else 4 }
             )
 
+            // Add checkbox for king moves alone
             HorizontalDivider(modifier = Modifier.padding(horizontal = 4.dp))
             TextSwitch(
                 kingMoves.value,
@@ -92,19 +156,22 @@ class ScorpionGame(
             )
         }
 
+        /** @inheritDoc */
         override suspend fun onDismiss() {
         }
 
+        /** @inheritDoc */
         override suspend fun onAccept() {
+            // Accepted update the changed values in the bundle and notice if it has changed
             var update = (moveKittyWhenFlipped != moveKitty.value).also {
                 if (it) {
                     moveKittyWhenFlipped = moveKitty.value
                     state.bundle.putBoolean(MOVE_KITTY_WHEN_FLIPPED, moveKittyWhenFlipped)
                 }
             }
-            update = (hiddenCardColumnCount != hiddenCards.value).also {
+            update = (hiddenCardColumnCount != hiddenCards.intValue).also {
                 if (it) {
-                    hiddenCardColumnCount = hiddenCards.value
+                    hiddenCardColumnCount = hiddenCards.intValue
                     state.bundle.putInt(HIDDEN_CARD_COLUMN_COUNT, hiddenCardColumnCount)
                 }
             } || update
@@ -113,25 +180,35 @@ class ScorpionGame(
                     kingMovesAlone = kingMoves.value
                     state.bundle.putBoolean(KING_MOVES_ALONE, kingMovesAlone)
                 }
-            }
+            } || update
 
+            // Update the database if needed
             if (update)
                 dealer.onStateChanged(state)
         }
 
+        /** @inheritDoc */
         override fun reset() {
+            // Reset current values to values from game
             moveKitty.value = moveKittyWhenFlipped
             hiddenCards.intValue = hiddenCardColumnCount
             kingMoves.value = kingMovesAlone
         }
     }
 
+    /** Content for the settings dialog */
     private val settingsContent = object: DialogContent {
+        /** Current value of showHighlights */
         val showHints = mutableStateOf(false)
+        /** Current value of cheatCardFlip */
         var cheatFlip = mutableStateOf(false)
+        /** Current value of cheatMoveCard */
         var cheatMove = mutableStateOf(false)
+
+        /** @inheritDoc */
         @Composable
         override fun Content(modifier: Modifier) {
+            // Add the checkbox for showHighlights
             HorizontalDivider()
             TextSwitch(
                 showHints.value,
@@ -140,15 +217,18 @@ class ScorpionGame(
             )
 
             Spacer(Modifier.height(8.dp))
+            // Add cheats header
             Text(
                 stringResource(R.string.cheats)
             )
+            // Add checkbox for cheatCardFlip
             HorizontalDivider(Modifier.padding(top = 4.dp))
             TextSwitch(
                 cheatFlip.value,
                 R.string.cheat_card_flip,
                 onChange = { cheatFlip.value = it }
             )
+            // Add checkbox for cheatMoveCards
             HorizontalDivider()
             TextSwitch(
                 cheatMove.value,
@@ -157,13 +237,18 @@ class ScorpionGame(
             )
         }
 
+        /** @inheritDoc */
         override suspend fun onDismiss() {
         }
 
+        /** @inheritDoc */
         override suspend fun onAccept() {
+            // The settings were accepted
+            // Set the cheat flags
             cheatCardFlip = cheatFlip.value
             cheatMoveCard = cheatMove.value
 
+            // Update showHighlights in the bundle
             var update = false
             update = (showHints.value != showHighlights.value).also {
                 if (it) {
@@ -172,67 +257,95 @@ class ScorpionGame(
                 }
             } || update
 
+            // Update the database if needed
             if (update)
                 dealer.onStateChanged(state)
         }
 
+        /** @inheritDoc */
         override fun reset() {
+            // Reset the current values to the values from the game
             showHints.value = showHighlights.value
             cheatFlip.value = cheatCardFlip
             cheatMove.value = cheatMoveCard
         }
     }
 
+    /** @inheritDoc */
     override val cardBackAssetPath: String
         get() = dealer.cardBackAssetPath
 
+    /** @inheritDoc */
     override fun cardFrontAssetPath(value: Int): String {
         return dealer.cardFrontAssetPath(value)
     }
 
+    /** @inheritDoc */
     override suspend fun deal(shuffled: IntArray): List<Card> {
+        // Make a list to hold the cards
         val list = mutableListOf<Card>()
+        // Get an iterator to the shuffled card values
         val iterator = shuffled.iterator()
+        // Add cards to the list
         for (group in 0 until COLUMN_COUNT) {
             for (position in 0 until CARDS_PER_COLUMN) {
+                // Get the next value
                 val card = iterator.next()
+                // Add the card with the current group and position
                 list.add(
                     Card(0L, card, group, position, Card.calcFlags(
+                        // Set the card face up or face down depending on the column and position
                         faceDown = group < hiddenCardColumnCount && position < CARDS_FACE_DOWN, spread = true))
                 )
             }
         }
+
+        // Add remaining cards to the kitty, face down and not spread
         var position = 0
         while (iterator.hasNext()) {
             val card = iterator.next()
             list.add(Card(0L, card, KITTY_GROUP, position++, Card.calcFlags(faceDown = true)))
         }
 
+        // Clear the cheat count and update the database
         cheatCount = 0
         state.bundle.putInt(CHEAT_COUNT, cheatCount)
         dealer.onStateChanged(state)
+
+        // Return the list
         return list
     }
 
+    /** @inheritDoc */
     @Composable
     override fun Content(modifier: Modifier) {
+        // Get the height and width of the cards
         measurements.verticalSpacing.size = dealer.cardHeight.dp
         measurements.horizontalSpacing.size = dealer.cardWidth.dp
 
+        // Use a BoxWithConstraints to get the max width and height for the playing surface
         BoxWithConstraints(
             modifier = modifier
                 .fillMaxSize()
         ) {
+            // TODO: Need to set maximum sizes for larger screens
+            // Portrait makes two rows, one for the kitty and one for the columns
+            // Landscape puts the columns and kitty in one row
             val twoRows = maxHeight > maxWidth
-            val cols = if (twoRows) dealer.cards.size - 1 else dealer.cards.size
+            // The number of columns across the playing surface
+            val cols = if (twoRows) GROUP_COUNT - 1 else GROUP_COUNT
+            // The width of each column
             val colWidth = maxWidth / cols
+            // The scale needed for the desired width
             measurements.scale = (colWidth - padding) / measurements.horizontalSpacing.size
 
+            // Wrap everything in a column that we can scroll
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
             ) {
+                // Put the kitty in a separate row if needed
                 if (twoRows) {
                     CardGroup.RowContent(
                         dealer.cards[KITTY_GROUP],
@@ -244,12 +357,14 @@ class ScorpionGame(
                     )
                 }
 
+                // Put the other columns in another row and the kitty column if only one row
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .align(Alignment.Start)
                 ) {
                     for (group in dealer.cards.indices) {
+                        // Include the kitty column if not two rows
                         if (group != KITTY_GROUP || !twoRows) {
                             CardGroup.ColumnContent(
                                 dealer.cards[group],
@@ -266,72 +381,93 @@ class ScorpionGame(
         }
     }
 
-    override fun variantContent(): DialogContent? {
+    /** @inheritDoc */
+    override fun variantContent(): DialogContent {
         return variantContent
     }
 
+    /** @inheritDoc */
     override fun settingsContent(): DialogContent {
         return settingsContent
     }
 
+    /** @inheritDoc */
     override fun getFilter(highlight: Int): ColorFilter? {
+        // If the highlight isn't selected, and we aren't showing highlights
+        // then return null so the highlight isn't visible
         if (highlight != HIGHLIGHT_SELECTED && !showHighlights.value)
             return null
+        // Return the highlight
         return filters[highlight]
     }
 
-    fun isClickable(card: Card, withCheat: Boolean): Boolean {
-        return when {
-            card.faceDown -> {
-                if (card.group == KITTY_GROUP)
-                    card.spread || (withCheat && cheatCardFlip)
-                else
-                    card.position == dealer.cards[card.group].lastIndex ||
-                        (withCheat && cheatCardFlip && dealer.cards[card.group][card.position + 1]?.faceUp != false)
-            }
-            else -> true
-        }
-    }
-
+    /** @inheritDoc */
     override fun onClick(card: Card) {
+        // We need to run this in a coroutine because withUndo may
+        // Update the database
         dealer.scope.launch {
+            // Turn on undo
             withUndo { generation ->
-                val highlight = card.highlight
+                // is the card face down
                 if (card.faceDown) {
+                    // Legally face down cards cn flip only if they are in the kitty
+                    // and are spread, or the are at the bottom of a column
                     if (card.group == KITTY_GROUP) {
+                        // The card is in the kitty
                         if (moveKittyWhenFlipped) {
+                            // The kitty cards are moved to the first three columns when flipped
+                            // Have w spread the kitty yet?
                             if (dealer.cards[KITTY_GROUP][0]!!.spread) {
+                                // Yes - We flip and move all three cards in the kitty
                                 for (c in dealer.cards[KITTY_GROUP]) {
                                     val group = KITTY_COUNT - 1 - c!!.position
                                     c.changed(generation = generation, group = group, position = dealer.cards[group].size, faceDown = false, spread = true)
                                 }
-                            } else {
+                            } else if (cheatCardFlip) {
+                                // We are cheating, so flip and move the top card in the kitty
                                 val group = KITTY_COUNT - 1 - card.position
                                 card.changed(generation = generation, group = group, position = dealer.cards[group].size, faceDown = false, spread = true)
-                                cheated = true
+                                cheated = true          // Remember that we cheated
                             }
                         } else if (dealer.cards[KITTY_GROUP][0]!!.spread) {
+                            // The kitty has been spread, so we can flip the card without cheating
                             card.changed(generation = generation, faceDown = false, spread = true)
                         } else if (cheatCardFlip) {
+                            // We are cheating, so flip the card anyway
                             card.changed(generation = generation, faceDown = false, spread = true)
-                            cheated = true
+                            cheated = true          // Remember that we cheated
                         }
                     } else if (card.position == dealer.cards[card.group].lastIndex) {
+                        // The card is at the bottom of a column, so we can flip it
                         card.changed(generation = generation, faceDown = false, spread = true)
                     } else if (cheatCardFlip && dealer.cards[card.group][card.position + 1]!!.faceUp) {
+                        // We are cheating and the card is the bottom face down card in a column
                         card.changed(generation = generation, faceDown = false, spread = true)
-                        cheated = true
+                        cheated = true          // Remember that we cheated
                     }
-                } else if (highlight != HIGHLIGHT_ONE_LOWER || !checkAndMove(card, generation)) {
-                    if (highlight != HIGHLIGHT_SELECTED) {
-                        highlight(card, HIGHLIGHT_SELECTED)
-                        findOneLower(card.value)?.let {
-                            if (card.group != it.group || card.position != it.position - 1)
-                                highlight(it, HIGHLIGHT_ONE_LOWER)
-                        }
-                        findOneHigher(card.value)?.let {
-                            if (card.group != it.group || card.position != it.position + 1)
-                                highlight(it, HIGHLIGHT_ONE_HIGHER)
+                } else {
+                    // The card is face up. If it is one lower than the selected
+                    // card, then try to move it below the selected card
+                    val highlight = card.highlight
+                    if (highlight != HIGHLIGHT_ONE_LOWER || !checkAndMove(card, generation)) {
+                        // checkAndMove couldn't move the card, so we highlight the cards
+                        // If the highlight is selected, then don't do anything because the
+                        // highlights will be removed in withUndo after we return
+                        if (highlight != HIGHLIGHT_SELECTED) {
+                            // Highlight the selected card
+                            highlight(card, HIGHLIGHT_SELECTED)
+                            findOneLower(card.value)?.let {
+                                // Highlight the card one lower, but skip it if it is already
+                                // immediately below the selected card.
+                                if (card.group != it.group || card.position != it.position - 1)
+                                    highlight(it, HIGHLIGHT_ONE_LOWER)
+                            }
+                            findOneHigher(card.value)?.let {
+                                // Highlight the card one higher, but skip it if it is already
+                                // immediately above the selected card.
+                                if (card.group != it.group || card.position != it.position + 1)
+                                    highlight(it, HIGHLIGHT_ONE_HIGHER)
+                            }
                         }
                     }
                 }
@@ -339,79 +475,132 @@ class ScorpionGame(
         }
     }
 
+    /** @inheritDoc */
     override fun onDoubleClick(card: Card) {
         dealer.scope.launch {
+            // We need to run this in a coroutine because withUndo may
+            // Update the database
             withUndo {generation ->
+                // Try to move the card
                 checkAndMove(card, generation)
             }
         }
     }
 
+    /**
+     * @inheritDoc
+     * We don't use cheating to determine whether the game is over
+     */
     override suspend fun checkGameOver(list: List<Card>, generation: Long) {
+        // The last card we processed
         var last: Card? = null
+        // The number of column breaks in the cards
         var empty = 0
+        // The number of movable kings
         var kings = 0
+        // Temporary holder for cards in the kitty
         val kitty = mutableListOf<Card>()
+        // The current card state sorted by group ascending and position descending
         val sorted = list.sortedWith(compareBy( { it.group }, { -it.position }))
-        for (i in sorted.indices) {
-            val c = sorted[i]
+        // Loop through all of the card
+        for (c in sorted) {
+            // Is it in the kitty
             if (c.group != KITTY_GROUP) {
+                // Is this card at the bottom of a column
                 if (last?.group != c.group) {
+                    // Yes - because positions are sorted descending
+                    // If it is face down, then the game isn't over, so return
                     if (c.faceDown)
                         return
+                    // If the card one lower than this one can be played
+                    // then the game isn't over, so return
                     if (c.value % CARDS_PER_SUIT > 0) {
                         if (list[c.value - 1].let { it.faceUp && it.group != c.group })
                             return
                     }
+                    ++empty         // Note the column break
                 }
-                if (c.group != (last?.group?: -1))
-                    ++empty
+
+                // Check to see if this is a movable king.
+                // It must be a king and it must be face up
                 if ((c.value % CARDS_PER_SUIT) == CARDS_PER_SUIT - 1 && c.faceUp &&
-                    (c.position > 0 || (i > 0 &&
-                        sorted[i - 1].let { it.group == c.group && it.value + 1 != c.value }))
+                    // If it is not at the top of the column it is movable. Otherwise
+                    // it is only movable if the king moves alone and it isn't already
+                    // matched with its queen. Because we sort the position descending
+                    // the previous card would need to be the matched queen.
+                    (c.position > 0 || (kingMovesAlone &&
+                        last?.let { it.group == c.group && it.value + 1 != c.value } == true))
                 ) {
+                    // We have a moveable king
                     ++kings
                 }
             } else {
+                // Add the kitty card to the temp list
                 kitty.add(c)
+                // If card is face down and spread, then we can flip it.
+                // The game isn't over, so return
                 if (c.faceDown) {
                     if (c.spread)
                         return
                 } else if (c.value % CARDS_PER_SUIT == CARDS_PER_SUIT - 1)
-                    ++kings
+                    ++kings         // A face up king in the kitty can always be moved
             }
+            // Keep track of last card
             last = c
         }
 
+        // If we have some movable kings and the number of
+        // column breaks is less than the column count, then
+        // we can move a king to an empty column, so return
         if (kings > 0 && empty < COLUMN_COUNT)
             return
 
-        if (kitty.isEmpty() || kitty[0].spread) {
+        // At this point we think the game is over. But if there
+        // are cards in the kitty that we haven't spread, then
+        // we can spread them and continue play.
+        if (kitty.isEmpty() || kitty.all { it.spread }) {
+            // Nope the kitty is spread, so we are done. Now the question is
+            // whether we won or lost.
+            // Loop through each suit
             for (s in 0 until CARD_COUNT step CARDS_PER_SUIT) {
+                // Get the group for the ace in the suit
                 val g = list[s].group
+                // Now loop through all of the cards in the suit
                 for (c in 0 until CARDS_PER_SUIT) {
+                    // All of the card in the suit must be in the same group
+                    // and positions must be from ace to king, 12 to 0 respectively.
                     if (list[s + c].let { it.group != g || it.position != CARDS_PER_SUIT - 1 - c }) {
+                        // A card is not in the right group or position. We lost.
+                        // Show the no more moves dialog and return
                         dealer.showNewGameOrDismissAlert(R.string.no_moves, R.string.game_over)
                         return
                     }
                 }
             }
+
+            // We won !!. Did we cheat
             if (cheatCount == 0)
-                dealer.showNewGameOrDismissAlert(R.string.game_won, R.string.congratulations)
+                dealer.showNewGameOrDismissAlert(R.string.game_won, R.string.congratulations)   // No show the dialog
             else
-                dealer.showNewGameOrDismissAlert(R.plurals.game_won, R.string.congratulations, cheatCount, cheatCount)
+                dealer.showNewGameOrDismissAlert(R.plurals.game_won, R.string.congratulations, cheatCount, cheatCount) // Yes the dialog with cheat count
             return
         }
 
+        // We need to spread the cards in the kitty
         for (card in kitty) {
+            // If it isn't already spread (from cheating) then change it.
             if (!card.spread)
                 card.changed(generation = generation, spread = true)
         }
     }
 
+    /** @inheritDoc */
     override fun isValid(cards: List<Card>, card: Card, lastCard: Card?): String? {
+        // Make sure the card group is valid
         if (card.group < 0 || card.group >= GROUP_COUNT)
             return "Group invalid"
+        // Make sure the card position is 0, if the group is changing, or
+        // one more thant the card before it.
         return if (card.position !=
             (if (lastCard != null && card.group == lastCard.group) lastCard.position + 1 else 0)
             )
@@ -420,18 +609,26 @@ class ScorpionGame(
             null
     }
 
+    /**
+     * Add a card to the card changed list
+     * @param generation The new generation
+     * @param group The new group
+     * @param position The new position
+     * @param highlight The new highlight
+     * @param faceDown The new faceDown flag
+     * @param spread The new spread flag
+     */
     private fun Card.changed(
         generation: Long = this.generation,
-        value: Int = this.value,
         group: Int = this.group,
         position: Int = this.position,
         highlight: Int = this.highlight,
         faceDown: Boolean = this.faceDown,
         spread: Boolean = this.spread
     ) {
+        // Add the card remember how many cards have changed
         cardChangeCount = dealer.cardChanged(copy(
             generation = generation,
-            value = value,
             group = group,
             position = position,
             highlight = highlight,
@@ -440,98 +637,166 @@ class ScorpionGame(
         ))
     }
 
+    /**
+     * Extra processing of plays by the game
+     * @param actions The play to be made
+     * This method doesn't bother to check nesting, because the game
+     * doesn't nest undo.
+     */
     private suspend fun <T> withUndo(actions: suspend (generation: Long) -> T): T {
+        // Clear the cheated flag and cardChangeCount
         cheated = false
         cardChangeCount = 0
+        // Pass down to the dealer withUndo method
         return dealer.withUndo {
+            // Run the actions
             actions(it).also {
+                // When they are done, check to see if anything changed
                 if (cardChangeCount > 0) {
+                    // Yes, if we cheated, then update the cheat count
                     if (cheated) {
                         cheatCount += 1
                         state.bundle.putInt(CHEAT_COUNT, cheatCount)
                         dealer.onStateChanged(state)
                     }
+                    // Something changed, so clear the cheat flags.
                     cheatCardFlip = false
                     cheatMoveCard = false
                 }
             }
         }
     }
+
+    /**
+     * Try to move a card
+     * @param card The card to move
+     * @param generation The new generation
+     */
     private fun checkAndMove(card: Card, generation: Long): Boolean {
+        // We can only move face up cards
         if (card.faceUp) {
             if (card.value % CARDS_PER_SUIT == CARDS_PER_SUIT - 1) {
-                val moveAlone = kingMovesAlone && card.position < dealer.cards[card.group].lastIndex &&
-                    dealer.cards[card.group][card.position + 1]!!.value != card.value - 1
+                // The card is a king. Can move it alone, or with the cards below it
+                // A card in the kitty always moves alone. Otherwise, the card can only
+                // move alone, if it is allowed, and it isn't along in its column, and
+                // it isn't matched with its queen
+                val moveAlone = card.group == KITTY_GROUP || (kingMovesAlone && card.position < dealer.cards[card.group].lastIndex &&
+                    dealer.cards[card.group][card.position + 1]!!.value != card.value - 1)
+                // If the card isn't at the top of a column, or we can move it alone
+                // Then look for an empty column where it can go.
                 if (card.position != 0 || moveAlone) {
-                    for (empty in 0 until dealer.cards.lastIndex) {
+                    // Look through all the columns
+                    for (empty in 0 until COLUMN_COUNT) {
+                        // Is this one empty
                         if (dealer.cards[empty].isEmpty()) {
+                            // Yes move it and let the caller know we were able to move it
                             moveCards(card, empty, -1, generation, moveAlone)
                             return true
                         }
                     }
                 }
+
+                // We don't have legal way to move the kind, so check for cheating
                 findOneLower(card.value)?.let {
-                    if (cheatMoveCard && it.faceUp && (it.group != card.group || it.position != card.position + 1)) {
+                    // If we are cheating, and the queen is face up, not in the kitty and not already matched with the king
+                    if (cheatMoveCard && it.faceUp && it.group != KITTY_GROUP &&
+                        (it.group != card.group || it.position != card.position + 1)) {
+                        // We will move just the king above the queen.
                         moveCards(card, it.group, it.position, generation, true)
-                        cheated = true
-                        return true
+                        cheated = true          // We cheated
+                        return true             // But we did move the card
                     }
                 }
             } else {
+                // Not a king, so we need to move to the card one higher than this one
                 findOneHigher(card.value)?.let {
-                    val to = dealer.cards[it.group]
-                    val c = to[it.position]
-                    if (it.group != card.group && it.group != KITTY_GROUP && it.position == to.lastIndex && c!!.faceUp) {
+                    // We can only legally move the card if the one higher
+                    // is not in the same column, is not in the kitty,
+                    // is at the end of column and is faceUp
+                    if (it.group != card.group && it.group != KITTY_GROUP &&
+                        it.position == dealer.cards[it.group].lastIndex && it.faceUp) {
+                        // Move the cards to the end of column
                         moveCards(card, it.group, -1, generation, card.group == KITTY_GROUP)
-                        return true
+                        return true         // We moved something
                     } else if (cheatMoveCard && it.faceUp) {
+                        // We are cheating and the target card is face up, so we move
+                        // just the one card below the target card
                         moveCards(card, it.group, it.position + 1, generation, true)
-                        cheated = true
-                        return true
+                        cheated = true          // We cheated
+                        return true             // And moved something
                     }
                 }
             }
         }
 
+        // We couldn't move anything
         return false
     }
 
+    /**
+     * Add a highlight to a card
+     * @param card The card
+     * @param highlight The highlight
+     */
     private fun highlight(card: Card, highlight: Int) {
         if (card.faceUp)
             card.changed(highlight = highlight)
     }
 
+    /**
+     * Move cards
+     * @param card The top card to move
+     * @param toGroup The target column
+     * @param toPos The target position. -1 means move to the end of the column
+     * @param generation The new generation
+     * @param single Only move the top card
+     */
     private fun moveCards(card: Card, toGroup: Int, toPos: Int, generation: Long, single: Boolean) {
+        // From column
         val from = dealer.cards[card.group]
+        // To column
         val to = dealer.cards[toGroup]
+        // Position to move to
         var pos = if (toPos >= 0) toPos else to.size
+        // If we are cheating, we can move cards in the same column
         if (card.group == toGroup) {
-            val moveStart: Int
-            val moveEnd: Int
-            val bump: Int
+            val moveStart: Int          // Position to start the move
+            val moveEnd: Int            // Position to end the move
+            val bump: Int               // Amount to move the cards
             if (pos < card.position) {
-                moveStart = pos
-                moveEnd = card.position
-                bump = 1
+                // We are moving up in the column
+                moveStart = pos             // Start moving cards below the target
+                moveEnd = card.position - 1 // Stop moving cards above the card to be moved
+                bump = 1                    // Push the cards down the column
             } else if (pos > card.position) {
-                --pos
-                moveStart = card.position
-                moveEnd = pos
-                bump = -1
+                --pos                           // We will move the target card up one, so this card will go one lower
+                moveStart = card.position + 1   // Start at the card after this card
+                moveEnd = pos                   // End at the target card
+                bump = -1                       // Move cards up in the column
             } else
                 return          // Moving to same position, do nothing
+            // Move all the cards up or down one
             for (i in moveStart .. moveEnd)
                 from[i]?.let { it.changed(generation = generation, group = toGroup, position = it.position + bump, highlight = Card.HIGHLIGHT_NONE) }
+            // Move this card where it belongs
             card.changed(generation = generation, group = toGroup, position = pos, highlight = Card.HIGHLIGHT_NONE)
         } else {
+            // Moving between columns is easier
+            // Were do we stop the moving card
             val moveEnd = if (single)
                 card.position + 1
             else
                 from.size
+            // How many cards will we move
             val moveCount = moveEnd - card.position
+            // Move the cards below the target to make room for the new cards
             for (i in pos until to.size)
                 to[i]?.let { it.changed(generation = generation, group = toGroup, position = it.position + moveCount, highlight = Card.HIGHLIGHT_NONE) }
+            // Move the cards to where they belong
             for (i in card.position until from.size) {
+                // If the cards are before moveEnd, they will move to the new group
+                // Otherwise they move up one. This assumes that we are either moving
+                // all the cards to the bottom of the column, or just one.
                 if (i < moveEnd)
                     from[i]?.changed(generation = generation, group = toGroup, position = pos++, highlight = Card.HIGHLIGHT_NONE)
                 else
@@ -540,6 +805,11 @@ class ScorpionGame(
         }
     }
 
+    /**
+     * Find the card on lower than another
+     * @param cardValue The card value
+     * @return The card, or null if cardValue is an ace
+     */
     private fun findOneLower(cardValue: Int): Card? {
         val value = cardValue % CARDS_PER_SUIT
         return if (value != 0)
@@ -548,6 +818,11 @@ class ScorpionGame(
             null
     }
 
+    /**
+     * Find the card on higher than another
+     * @param cardValue The card value
+     * @return The card, or null if cardValue is a king
+     */
     private fun findOneHigher(cardValue: Int): Card? {
         val value = cardValue % CARDS_PER_SUIT
         return if (value != CARDS_PER_SUIT - 1)
@@ -557,23 +832,41 @@ class ScorpionGame(
     }
 
     companion object {
+        // Constants for laying out the playing surface
+        /** The number of columns in the game */
         private const val COLUMN_COUNT: Int = 7
+        /** The group number of the kitty */
         private const val KITTY_GROUP: Int = COLUMN_COUNT
+        /** The number of groups in the game */
         private const val GROUP_COUNT: Int = KITTY_GROUP + 1
+        /** The number of cards per column */
         private const val CARDS_PER_COLUMN: Int = 7
+        /** The number of cards face down in a column */
         private const val CARDS_FACE_DOWN: Int = 3
-        private const val KITTY_COUNT = Game.CARD_COUNT - COLUMN_COUNT * CARDS_PER_COLUMN
+        /** The number of cards dealt to the kitty */
+        private const val KITTY_COUNT = CARD_COUNT - COLUMN_COUNT * CARDS_PER_COLUMN
 
+        // Highlight values
+        /** Highlight value for selected */
         private const val HIGHLIGHT_SELECTED: Int  = 1
+        /** Highlight value for one lower than the selected card */
         private const val HIGHLIGHT_ONE_LOWER: Int  = 2
+        /** Highlight value for one height than the selected card */
         private const val HIGHLIGHT_ONE_HIGHER: Int  = 3
 
+        // Keys for values kept in the state bundle
+        /** Key for show highlight */
         private const val SHOW_HIGHLIGHTS: String = "show_highlights"
+        /** Key for the cheat count */
         private const val CHEAT_COUNT: String = "cheat_count"
+        /** Key for flag to move kitty cards when they are flipped */
         private const val MOVE_KITTY_WHEN_FLIPPED: String = "move_kitty_when_flipped"
+        /** Key for the number of columns with face down cards */
         private const val HIDDEN_CARD_COLUMN_COUNT: String = "hidden_card_column_count"
+        /** Key for the flag to move kings by themselves. */
         private const val KING_MOVES_ALONE: String = "king_moves_alone"
 
+        /** The filter used for the highlights */
         private val filters: List<ColorFilter?> = listOf(
             null,
             BlendModeColorFilter(Color(0xFFA0A0A0), BlendMode.Multiply),
