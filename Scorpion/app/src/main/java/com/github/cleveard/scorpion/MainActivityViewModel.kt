@@ -142,12 +142,19 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
     private var maxGeneration: MutableState<Long> = mutableLongStateOf(0L)
     /** Mutable state for the switch to allow card flips to be undone */
     private var undoCardFlips: MutableState<Boolean> = mutableStateOf(true)
-    /** A map of card values to changed cards */
+    /** A map of card values to changed cards for a single action block */
     private val changedCards: MutableMap<Int, Card> = mutableMapOf()
+    /** A map of card value to changed cards for all action blocks */
+    private val newCards: MutableMap<Int, Card> = mutableMapOf()
+    /** A map of card values to the previous value for cards in newCards */
+    private val previousCards: MutableMap<Int, Card> = mutableMapOf()
     /** A map of card values to highlight values for cards */
     private val highlightCards: MutableMap<Int, HighlightEntity> = mutableMapOf()
+    /** Previous map of card value to highlight values for cards */
+    private val previousHighlight: MutableList<HighlightEntity> = mutableListOf()
     /** The withUndo nesting level */
     private var undoNesting: Int = 0
+    /** Did a card flip in the previous */
 
     /** @inheritDoc */
     override val cards: List<List<Card?>>
@@ -169,21 +176,27 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
             shuffle()
             // Let the game deal the values into cards
             val list = game.deal(this)
-            // Add the cards as the first generation
-            CardDatabase.db.newGeneration(game.name, list, 0L)
-            // Update the cards in the current card list
-            updateCards(cardDeck, list)
-            // Clear all of the card groups
-            cardGroups.forEach { it.clear() }
-            // Put the cards into the card groups
-            setCards(cardDeck)
-            // Clear any highlights
-            highlightCards.clear()
-            CardDatabase.db.getHighlightDao().clear()
-            // Set the current, minimum and maximum generations
-            generation.value = 0L
-            minGeneration.value = 0L
-            maxGeneration.value = 0L
+            var success = false
+            try {
+                CardDatabase.db.withTransaction {
+                    // Update the cards in the current card list
+                    updateCards(list)
+                    // Add the cards as the first generation
+                    CardDatabase.db.newGeneration(game.name, list, 0L)
+                    // Clear any highlights
+                    highlightCards.clear()
+                    CardDatabase.db.getHighlightDao().clear()
+                    // Set the current, minimum and maximum generations
+                    generation.value = 0L
+                    minGeneration.value = 0L
+                    maxGeneration.value = 0L
+                    success = true
+                }
+            } catch (_: DatabaseInconsistency) {
+            } finally {
+                if (!success)
+                    resetGame()
+            }
         }
     }
 
@@ -465,12 +478,18 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
         }
     }
 
+    private suspend fun inconsistentDatabase(error: String) {
+        // Show an alert and to start a new game
+        showNewGameOrDismissAlert(R.string.database_inconsistency, R.string.error)
+        throw DatabaseInconsistency(error)
+    }
+
     /**
      * Validity check for the database
      * This method loads all of the cards for a generation
      * and makes sure the results are valid.
      */
-    private suspend fun loadAndCheck(): Boolean {
+    private suspend fun loadAndCheck() {
         // Load the cards and highlights for the generation
         val pair = CardDatabase.db.loadGame(generation.value)
         // Validate the database and return an error string if the is a problem
@@ -479,36 +498,29 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
             if (pair == null)
                 return@run "Can't reload the game"
             // Make sure the card count is correct
-            if (pair.first.size != Game.CARD_COUNT)
+            if (pair.first.size != cardDeck.size)
                 return@run "Size incorrect"
 
             // Set the highlights on the cards
             val list = pair.first
-            setHighlight(list, pair.second)
-            // Sort the list by card value and make sure
-            // all of the cards are there
-            list.sortBy { it.value }
-            for (i in list.indices) {
-                if (i != list[i].value)
-                    return@run "Card $i value incorrect"
+            pair.second.forEach {
+                list[it.card] = list[it.card].copy(highlight = it.highlight)
             }
-            // Sort the list by group and position
-            list.sortWith(compareBy({ it.group }, { it.position }))
-            var last: Card? = null
-            for (c in list) {
-                // Call the game validity checker to make sure
-                // everything is OK
-                game.isValid(pair.first, c, last)?.let {
-                    return@run it
-                }
-                last = c
+            for (i in 0 until cardDeck.size) {
+                // Compare the cards from each table, ignoring highlight
+                val c = this.cardDeck[i]
+                val d = pair.first[i]
+                val diff = d.generation != c.generation || d.value != c.value || d.group != c.group ||
+                        d.spread != c.spread || d.faceDown != c.faceDown
+                if (diff)
+                    return@run "Card $i value incorrect"
             }
             // No errors return null
             null
         }
 
         // If there was an error, dump information to the log
-        return if (error != null) {
+        if (error != null) {
             // Dump the generation
             Log.d(LOG_TAG, "Generation: ${generation.value}")
             for (i in 0 until cardDeck.size.coerceAtLeast(pair?.first?.size ?: 0)) {
@@ -516,53 +528,18 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
                 val c = this.cardDeck.getOrNull(i)
                 val d = pair?.first?.getOrNull(i)
                 // Compare the cards from each table, ignoring highlight
-                val same = (d != null && c != null &&
+                val diff = (d != null && c != null &&
                     (d.generation != c.generation || d.value != c.value || d.group != c.group ||
                         d.spread != c.spread || d.faceDown != c.faceDown)) ||
                     d !== c
                 // Log both cards if they are different
-                if (!same){
+                if (diff){
                     Log.d(LOG_TAG, "Card: $d != $c")
                 } else
                     Log.d(LOG_TAG, "Card: $d")  // Or just the loaded card if they are the same
             }
             // Show an alert and to start a new game
-            showNewGameOrDismissAlert(R.string.database_inconsistency, R.string.error)
-            false       // Return error
-        } else
-            true        // Return all ok
-    }
-
-    /**
-     * Clear highlight from the list of cards
-     * @param list The list of the cards to clear
-     * @param clear The highlight entities to clear
-     */
-    private fun clearHighlight(list: MutableList<Card>, clear: List<HighlightEntity>) {
-        clear.forEach {
-            // Check to see if we are changing the highlight instead of removing
-            if (!highlightCards.contains(it.card)) {
-                // We are removing the highlight. Set the card in the list
-                val next = list[it.card].copy(highlight = Card.HIGHLIGHT_NONE)
-                list[it.card] = next
-                // And in the card groups
-                cardGroups[next.group][next.position] = next
-            }
-        }
-    }
-
-    /**
-     * Set the highlights in the list of cards
-     * @param list The list of cards to set
-     * @param set The highlight to set
-     */
-    private fun setHighlight(list: MutableList<Card>, set: Collection<HighlightEntity>) {
-        set.forEach {
-            // Set the highlight in the list
-            val next = list[it.card].copy(highlight = it.highlight)
-            list[it.card] = next
-            // And in the card groups
-            cardGroups[next.group][next.position] = next
+            inconsistentDatabase(error)
         }
     }
 
@@ -571,100 +548,97 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
         // Success is set to true, if the action completes
         var success = false
         // Get the current highlights, if we aren't nesting
-        val highlightedCards = if (undoNesting == 0)
-            highlightCards.values.toList().also {
-                highlightCards.clear()
-            }
-        else
-            null
+        if (undoNesting == 0) {
+            previousHighlight.addAll(highlightCards.values)
+            highlightCards.clear()
+        }
         ++undoNesting       // Mark the nesting level
-        try {
+        return try {
             // Execute the action
-            return action(generation.value + 1).also {
-                success = true
+            val result = action(generation.value + 1)
+            try {
+            // Check for card flips, to clear undo if we don't allow undo of card flips
+            // Where there any changes, other than highlights
+            // The game can change cards while checking for game over
+            // So we loop and let the game check until it doesn't change anything
+            while (changedCards.isNotEmpty()) {
+                // Keep previous values of cards
+                previousCards.putAll(changedCards.keys.map {
+                    it to (previousCards[it] ?: cardDeck[it])
+                })
+                // Update the cards in list with the changes
+                updateCards(changedCards.values)
+                // Keep track of all changes
+                newCards.putAll(changedCards)
+                // Clear the changed cards
+                changedCards.clear()
+                // Let the game check for game over. This may change more cards
+                game.checkGameOver(generation.value + 1)
             }
-        } finally {
-            // Done, whether successful or not
-            // highlightedCards is not null only when undo nesting is 0
-            highlightedCards?.let {oldHighlights ->
-                undoNesting = 0     // Make sure undo nesting is 0
-                try {
-                    // If the action succeeded, then update the database
-                    if (success) {
-                        // Make the full database update a single transaction
-                        CardDatabase.db.withTransaction {
-                            // Now success will indicate whether the database update worked
-                            success = false
-                            // Delete old highlights from the database
-                            CardDatabase.db.getHighlightDao().delete(oldHighlights.map { it.card })
-                            // Add the new highlights
-                            CardDatabase.db.getHighlightDao().insert(highlightCards.values)
-                            // Check for card flips, to clear undo if we don't allow undo of card flips
-                            var cardFlip = false
-                            // Where there any changes, other than highlights
-                            if (changedCards.isNotEmpty()) {
-                                // Yes, we apply the changes to a new list as we go
-                                val list = ArrayList<Card>().apply { addAll(cardDeck) }
-                                // More cards may change as we do this, and we keep all of the changes here
-                                val newCards = mutableMapOf<Int, Card>()
 
-                                // The game can change cards while checking for game over
-                                // So we loop and let the game check until it doesn't change anything
-                                while (changedCards.isNotEmpty()) {
-                                    // Check for a card flip
-                                    cardFlip = cardFlip || changedCards.values.any { cardDeck[it.value].faceDown && (it.flags and Card.FACE_DOWN) == 0  }
-                                    // Update the cards in list with the changes
-                                    updateCards(list, changedCards.values)
-                                    // Add the changed cards to the full set
-                                    newCards.putAll(changedCards)
-                                    // Clear the changed cards
-                                    changedCards.clear()
-                                    // Let the game check for game over. This may change more cards
-                                    game.checkGameOver(list, generation.value + 1)
-                                }
+            // Is this the last nesting level
+            if (undoNesting == 1) {
+                    // Make the full database update a single transaction
+                    CardDatabase.db.withTransaction {
+                        // Check for card flips, to clear undo if we don't allow undo of card flips
+                        val cardFlip = newCards.values.any { previousCards[it.value]!!.faceDown && (it.flags and Card.FACE_DOWN) == 0 }
 
-                                // Update the new generation in the database
-                                CardDatabase.db.newGeneration(
-                                    game.name,
-                                    newCards.values,
-                                    generation.value + 1
-                                )
-                                // If there was a card flip and we don't allow it to be undone
-                                if (!undoCardFlips.value && cardFlip) {
-                                    // Clear undo so the flip can't be undone.
-                                    CardDatabase.db.getCardDao().clearUndo(generation.value)
-                                    minGeneration.value = generation.value + 1
-                                }
-
-                                // Bump the generation and max generation
-                                ++generation.value
-                                maxGeneration.value = generation.value
-                                // Set the new cards in the main card list
-                                for (c in newCards.keys)
-                                    cardDeck[c] = list[c]
-                                // And in the card groups
-                                setCards(cardDeck)
-                                // Validate the database
-                                loadAndCheck()
+                        if (newCards.isNotEmpty()) {
+                            ++generation.value
+                            maxGeneration.value = generation.value
+                            // Update the new generation in the database
+                            CardDatabase.db.newGeneration(
+                                game.name,
+                                newCards.values,
+                                generation.value
+                            )
+                            // If there was a card flip and we don't allow it to be undone
+                            if (!undoCardFlips.value && cardFlip) {
+                                // Clear undo so the flip can't be undone.
+                                CardDatabase.db.getCardDao().clearUndo(generation.value - 1)
+                                minGeneration.value = generation.value
                             }
-
-                            // Make highlights are cleared and set
-                            clearHighlight(cardDeck, oldHighlights)
-                            setHighlight(cardDeck, highlightCards.values)
                         }
-                        // Done - success
+
+                        // Delete old highlights from the database
+                        CardDatabase.db.getHighlightDao().delete(previousHighlight.map { it.card })
+                        // Add the new highlights
+                        CardDatabase.db.getHighlightDao().insert(highlightCards.values)
+                        mutableMapOf<Int, Card>().apply {
+                            // Build a change list with the card highlight clear and set
+                            putAll(previousHighlight.map { it.card to cardDeck[it.card].copy(highlight = Card.HIGHLIGHT_NONE) })
+                            putAll(highlightCards.values.map { it.card to cardDeck[it.card].copy(highlight = it.highlight) })
+                            // Update the cards
+                            updateCards(values)
+                        }
+
+                        loadAndCheck()
                         success = true
                     }
-                } finally {
-                     // Make sure changeCards is empty
-                    changedCards.clear()
-                    // If we weren't successful, then put the highlights back
-                    if (!success) {
-                        highlightCards.clear()
-                        highlightCards.putAll(oldHighlights.map { it.card to it })
-                    }
                 }
-            }?: --undoNesting       // Leaving a nested undo
+            } catch (_: DatabaseInconsistency) {
+            }
+            result
+        } finally {
+            // Decrement the undo nesting
+            if (undoNesting > 1)
+                --undoNesting
+            else {
+                // Clear all of the structures keeping track of changes
+                undoNesting = 0
+                newCards.clear()
+                previousHighlight.clear()
+                previousHighlight.clear()
+                changedCards.clear()
+                // If the transaction failed, reset the game from the database
+                if (!success) {
+                    // Something went wrong
+                    // Reset the game from the database
+                    resetGame()
+                    // Make sure nothing is in the database for the new generation
+                    CardDatabase.db.getCardDao().clearRedo(generation.value + 1)
+                }
+            }
         }
     }
 
@@ -678,12 +652,23 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
     override suspend fun undo(): List<Card>? =
         // Make sure we can undo
         if (generation.value > minGeneration.value) {
-            // Get the cards to change
-            CardDatabase.db.undo(game.name, generation.value)?.also {
-                // Update the came
-                updateGame(it)
-                // Bump generation
-                --generation.value
+            var success = false
+            try {
+                CardDatabase.db.withTransaction {
+                    // Get the cards to change
+                    CardDatabase.db.undo(game.name, generation.value)?.also {
+                        // Update the came
+                        updateGame(it)
+                        // Bump generation
+                        --generation.value
+                        success = true
+                    }
+                }
+            } catch (_: DatabaseInconsistency) {
+                null
+            } finally {
+                if (!success)
+                    resetGame()
             }
         } else
             null
@@ -692,14 +677,23 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
     override suspend fun redo(): List<Card>? =
         // Make sure we can redo
         if (generation.value < maxGeneration.value) {
-            // Get the cards to change
-            CardDatabase.db.redo(game.name, generation.value + 1)?.also {
-                // Update the game
-                updateGame(it)
-                // Check for game over
-                game.checkGameOver(cardDeck, generation.value)
-                // Bump the generation
-                ++generation.value
+            var success = false
+            try {
+                // Get the cards to change
+                CardDatabase.db.redo(game.name, generation.value + 1)?.also {
+                    // Update the game
+                    updateGame(it)
+                    // Check for game over
+                    game.checkGameOver(generation.value)
+                    // Bump the generation
+                    ++generation.value
+                    success = true
+                }
+            } catch (_: DatabaseInconsistency) {
+                null
+            } finally {
+                if (!success)
+                    resetGame()
             }
         } else
             null
@@ -725,14 +719,69 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
     }
 
     /**
-     * Update the cards in the list
-     * @param list The list to update
+     * Update the cards in the collection
      * @param changed The cards that changed
+     * The cards are updated to cardDeck and cardGroups
      */
-    private fun updateCards(list: MutableList<Card>, changed: Collection<Card>) {
+    private suspend fun updateCards(changed: Collection<Card>) {
+        // Put a card or null into a card group
+        // Position is passed separately, because card may be null.
+        fun SnapshotStateList<Card?>.setCard(position: Int, card: Card?) {
+            // Add card if we are at the end of the list
+            if (position >= size)
+                add(card)
+            // Otherwise set the card if it has changed
+            else if (this[position] != card)
+                this[position] = card
+        }
+
+        val groupCount = game.groupCount
         // Set the cards in the list
         for (c in changed) {
-            list[c.value] = c.copy()
+            if (c.group >= groupCount)
+                inconsistentDatabase("Group larger than expected")
+            cardDeck[c.value] = c
+        }
+
+        // First make sure we have exactly the right number of groups
+        while (cardGroups.size < groupCount)
+            cardGroups.add(mutableStateListOf())
+        while (cardGroups.size > groupCount)
+            cardGroups.removeAt(cardGroups.lastIndex)
+
+        // Sort the cards by group and position
+        val sorted = cardDeck.sortedWith(compareBy({ it.group }, { it.position }))
+        var lastGroup = 0           // Track last group set
+        var lastPosition = 0        // and the last position set
+        var to: SnapshotStateList<Card?> = cardGroups[sorted.first().group]
+        // Place each card
+        for (card in sorted) {
+            // If the group changed, then remove cards that
+            // are no longer in the group
+            if (card.group > lastGroup) {
+                removeTails(lastGroup, lastPosition, card.group)
+                // Set the last group and position
+                lastGroup = card.group
+                lastPosition = 0
+                to = cardGroups[card.group]
+            }
+            // Add nulls if there is a gap in positions
+            while (lastPosition < card.position)
+                to.setCard(lastPosition++, null)
+            // Set the card
+            to.setCard(lastPosition++, card)
+        }
+
+        // Remove any other cards not needed in groups
+        removeTails(lastGroup, lastPosition, cardGroups.size)
+
+        // Validity check. Can't use !== because the SnapshotStateList
+        // checks for changes using ==
+        if (cardDeck.any { cardGroups[it.group][it.position] != it })
+            inconsistentDatabase("Card deck and groups are out of sync")
+        game.isValid().also {
+            if (it != null)
+                inconsistentDatabase(it)
         }
     }
 
@@ -740,13 +789,11 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
      * Update the game
      * @param list The list of cards to update
      */
-    private fun updateGame(list: List<Card>) {
+    private suspend fun updateGame(list: List<Card>) {
         // Clear the highlights
-        clearHighlight(cardDeck, highlightCards.values.toList().also { highlightCards.clear() })
+        updateCards(highlightCards.values.map { cardDeck[it.card].copy(highlight = Card.HIGHLIGHT_NONE) })
         // Update the cards in the card list
-        updateCards(cardDeck, list)
-        // Update the cards in the card groups
-        setCards(cardDeck)
+        updateCards(list)
     }
 
     /**
@@ -761,14 +808,12 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
                         CardDatabase.db.loadGame(state.generation)?.let { pair ->
                             // Clear current cards in the groups
                             cardGroups.forEach { it.clear() }
-                            // Set the card groups from database
-                            setCards(pair.first)
                             // Set the list of cards from the database
-                            pair.first.forEach { cardDeck[it.value] = it }
+                            updateCards(pair.first)
                             // Clear highlight list
                             highlightCards.clear()
                             // Set the highlights from the database
-                            setHighlight(cardDeck, pair.second)
+                            updateCards(pair.second.map { cardDeck[it.card].copy(highlight = it.highlight) })
                             // Add the highlights to the highlight list
                             highlightCards.putAll(pair.second.map { it.card to it })
                             // Set the current, min and max generations
@@ -776,10 +821,13 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
                             minGeneration.value = dbMinGeneration
                             maxGeneration.value = dbMaxGeneration
                         } ?: deal()         // Something didn't work, deal a new game
+                        newCards.clear()
+                        previousHighlight.clear()
+                        previousHighlight.clear()
                         // Clear all card changes
                         changedCards.clear()
                         // Check for game over
-                        game.checkGameOver(cardDeck, state.generation)
+                        game.checkGameOver(state.generation)
                     } else
                         null
                 }
@@ -808,69 +856,6 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
                 cardGroups[i].clear()
             }
         }
-    }
-
-    /**
-     * Set the cards in the card groups
-     * @param cardList The full list of all of the cards
-     * This method only sets cards that have changed to minimize
-     * recomposes
-     */
-    private fun setCards(cardList: List<Card>) {
-        // Put a card or null into a card group
-        // Position is passed separately, because card may be null.
-        fun SnapshotStateList<Card?>.setCard(position: Int, card: Card?) {
-            // Pad end of list with nulls if needed
-            while (position >= size)
-                add(null)
-
-            // Get value to compare
-            val c = this[position]
-            // If either c or card is null, then we will replace the value
-            // if c != card. If both are not null, then we only compare
-            // generation, value, faceDown and spread. The group and position
-            // must be the same, because they are at the same position in
-            // the same group. We also don't change cards that differ in highlight
-            // because that is handled elsewhere
-            if (card == null || c == null) {
-                if (card != c)
-                    this[position] = card
-            } else if (card.generation != c.generation || card.value != c.value ||
-                card.faceDown != c.faceDown || card.spread != c.spread)
-                this[card.position] = card
-        }
-
-        // First make sure we have enough groups for the game.
-        while (cardGroups.size < game.groupCount)
-            cardGroups.add(mutableStateListOf())
-        // Sort the cards by group and position
-        val sorted = cardList.sortedWith(compareBy({ it.group }, { it.position }))
-        var lastGroup = 0           // Track last group set
-        var lastPosition = 0        // and the last position set
-        // Place each card
-        for (card in sorted) {
-            // Make sure we have enough groups. Shouldn't be needed
-            while (card.group >= cardGroups.size)
-                cardGroups.add(mutableStateListOf())
-
-            // If the group changed, then remove cards that
-            // are no longer in the group
-            if (card.group > lastGroup) {
-                removeTails(lastGroup, lastPosition, card.group)
-                // Set the last group and position
-                lastGroup = card.group
-                lastPosition = 0
-            }
-            val to = cardGroups[card.group]
-            // Add nulls if there is a gap in positions
-            while (lastPosition < card.position)
-                to.setCard(lastPosition++, null)
-            // Set the card
-            to.setCard(lastPosition++, card)
-        }
-
-        // Remove any other cards not needed in groups
-        removeTails(lastGroup, lastPosition, cardGroups.size)
     }
 
     /**
@@ -979,6 +964,8 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
             callback()
         }
     }
+
+    class DatabaseInconsistency(msg: String? = null, cause: Throwable? = null): Exception(msg, cause)
 
     companion object {
         // The are keys for bundle values in the state bundle for the view model.

@@ -491,122 +491,98 @@ class ScorpionGame(
      * @inheritDoc
      * We don't use cheating to determine whether the game is over
      */
-    override suspend fun checkGameOver(list: List<Card>, generation: Long) {
-        // The last card we processed
-        var last: Card? = null
-        // The number of column breaks in the cards
-        var empty = 0
-        // The number of movable kings
-        var kings = 0
-        // Temporary holder for cards in the kitty
-        val kitty = mutableListOf<Card>()
-        // The current card state sorted by group ascending and position descending
-        val sorted = list.sortedWith(compareBy( { it.group }, { -it.position }))
-        // Loop through all of the card
-        for (c in sorted) {
-            // Is it in the kitty
-            if (c.group != KITTY_GROUP) {
-                // Is this card at the bottom of a column
-                if (last?.group != c.group) {
-                    // Yes - because positions are sorted descending
-                    // If it is face down, then the game isn't over, so return
-                    if (c.faceDown)
-                        return
-                    // If the card one lower than this one can be played
-                    // then the game isn't over, so return
-                    if (c.value % CARDS_PER_SUIT > 0) {
-                        if (list[c.value - 1].let { it.faceUp && it.group != c.group })
-                            return
-                    }
-                    ++empty         // Note the column break
+    override suspend fun checkGameOver(generation: Long) {
+        // Loop through all of the groups except the kitty
+        for (i in 0 until COLUMN_COUNT) {
+            // See if we can play on the last card in the column
+            dealer.cards[i].lastOrNull()?.let {card ->
+                // Card is face down, we can play it
+                if (card.faceDown)
+                    return          // the game isn't over
+                // See if we can play the card one lower
+                findOneLower(card.value)?.let {
+                    // The one lower card is in a different column and face
+                    if (it.group != card.group && it.faceUp)
+                        return      // The game isn't over
                 }
-
-                // Check to see if this is a movable king.
-                // It must be a king and it must be face up
-                if ((c.value % CARDS_PER_SUIT) == CARDS_PER_SUIT - 1 && c.faceUp &&
-                    // If it is not at the top of the column it is movable. Otherwise
-                    // it is only movable if the king moves alone and it isn't already
-                    // matched with its queen. Because we sort the position descending
-                    // the previous card would need to be the matched queen.
-                    (c.position > 0 || (kingMovesAlone &&
-                        last?.let { it.group == c.group && it.value + 1 != c.value } == true))
-                ) {
-                    // We have a moveable king
-                    ++kings
-                }
-            } else {
-                // Add the kitty card to the temp list
-                kitty.add(c)
-                // If card is face down and spread, then we can flip it.
-                // The game isn't over, so return
-                if (c.faceDown) {
-                    if (c.spread)
-                        return
-                } else if (c.value % CARDS_PER_SUIT == CARDS_PER_SUIT - 1)
-                    ++kings         // A face up king in the kitty can always be moved
             }
-            // Keep track of last card
-            last = c
         }
 
-        // If we have some movable kings and the number of
-        // column breaks is less than the column count, then
-        // we can move a king to an empty column, so return
-        if (kings > 0 && empty < COLUMN_COUNT)
-            return
+        // Next see if we can move any kings to an empty column
+        // First check for an empty column
+        if (dealer.cards.withIndex().any {it.index < COLUMN_COUNT && it.value.isEmpty() }) {
+            // There is an empty column not look for a king
+            for (i in CARDS_PER_SUIT - 1 until CARD_COUNT step CARDS_PER_SUIT) {
+                // Find the king and queen
+                val king = dealer.findCard(i)
+                val queen = dealer.findCard(i - 1)
+                // The king needs to be face up
+                // If the king is in the kitty or not in position 0 it could be moved
+                // If the king is in position 0, it can only be move if the king move alone
+                // and the queen isn't immediately below the queen
+                if (king.faceUp && (king.group == KITTY_GROUP || king.position > 0 ||
+                        (kingMovesAlone && (king.group != queen.group || king.position + 1 != queen.position))))
+                    return          // We can move the king
+            }
+        }
+
+        val kitty = dealer.cards[KITTY_GROUP]
+        // See if the kitty has any face down cards
+        if (kitty.firstOrNull()?.spread == true) {
+            // We have spread the kitty, so lets look for a face down card
+            if (kitty.any { it!!.faceDown })
+                return              // We can flip a card in the kit
+        }
 
         // At this point we think the game is over. But if there
         // are cards in the kitty that we haven't spread, then
         // we can spread them and continue play.
-        if (kitty.isEmpty() || kitty.all { it.spread }) {
-            // Nope the kitty is spread, so we are done. Now the question is
-            // whether we won or lost.
-            // Loop through each suit
-            for (s in 0 until CARD_COUNT step CARDS_PER_SUIT) {
-                // Get the group for the ace in the suit
-                val g = list[s].group
-                // Now loop through all of the cards in the suit
-                for (c in 0 until CARDS_PER_SUIT) {
-                    // All of the card in the suit must be in the same group
-                    // and positions must be from ace to king, 12 to 0 respectively.
-                    if (list[s + c].let { it.group != g || it.position != CARDS_PER_SUIT - 1 - c }) {
-                        // A card is not in the right group or position. We lost.
-                        // Show the no more moves dialog and return
-                        dealer.showNewGameOrDismissAlert(R.string.no_moves, R.string.game_over)
-                        return
-                    }
+        if (kitty.isEmpty() || kitty.all { it!!.spread != false }) {
+            // Did we win? Every colum must either be empty or
+            // all of the cards in a suit in descending order
+            val won = dealer.cards.all { group ->
+                // The column must be empty, or all of the cards in a suit
+                group.isEmpty() || group.let {
+                    // Calculate the ace value for the suit of the
+                    // first card in the group.
+                    val ace = (group.first()!!.value / CARDS_PER_SUIT) * CARDS_PER_SUIT
+                    // Now the range of cards in the suit
+                    val suit = ace..<ace + CARDS_PER_SUIT
+                    // Each card in the column must be in the suit and decreasing in value
+                    group.all { card -> card!!.value in suit && card.position == CARDS_PER_SUIT - 1 - (card.value - ace) }
                 }
             }
 
-            // We won !!. Did we cheat
-            if (cheatCount == 0)
-                dealer.showNewGameOrDismissAlert(R.string.game_won, R.string.congratulations)   // No show the dialog
-            else
-                dealer.showNewGameOrDismissAlert(R.plurals.game_won, R.string.congratulations, cheatCount, cheatCount) // Yes the dialog with cheat count
-            return
-        }
-
-        // We need to spread the cards in the kitty
-        for (card in kitty) {
-            // If it isn't already spread (from cheating) then change it.
-            if (!card.spread)
-                card.changed(generation = generation, spread = true)
+            // Did we win
+            if (won) {
+                // We won !!. Did we cheat
+                if (cheatCount == 0)
+                    dealer.showNewGameOrDismissAlert(R.string.game_won, R.string.congratulations)   // No show the dialog
+                else
+                    dealer.showNewGameOrDismissAlert(R.plurals.game_won, R.string.congratulations, cheatCount, cheatCount) // Yes the dialog with cheat count
+            } else {
+                // A card is not in the right group or position. We lost.
+                // Show the no more moves dialog and return
+                dealer.showNewGameOrDismissAlert(R.string.no_moves, R.string.game_over)
+            }
+        } else {
+            // We need to spread the cards in the kitty
+            for (card in kitty) {
+                // If it isn't already spread (from cheating) then change it.
+                if (!card!!.spread)
+                    card.changed(generation = generation, spread = true)
+            }
         }
     }
 
     /** @inheritDoc */
-    override fun isValid(cards: List<Card>, card: Card, lastCard: Card?): String? {
-        // Make sure the card group is valid
-        if (card.group < 0 || card.group >= GROUP_COUNT)
-            return "Group invalid"
-        // Make sure the card position is 0, if the group is changing, or
-        // one more thant the card before it.
-        return if (card.position !=
-            (if (lastCard != null && card.group == lastCard.group) lastCard.position + 1 else 0)
-            )
-            "Position invalid"
-        else
-            null
+    override fun isValid(): String? {
+        // The dealer makes sure the each card in the deck is in the
+        // correct place in the groups, so all we need to do is make
+        // sure there are no nulls
+        if (dealer.cards.any { it.any { it == null } })
+            return "Nulls present in card groups"
+        return null
     }
 
     /**

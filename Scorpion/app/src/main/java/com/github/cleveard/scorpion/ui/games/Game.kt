@@ -72,16 +72,13 @@ sealed class Game(
      * The game can do more or less what it wants. It can update cards
      * or show a dialog
      */
-    abstract suspend fun checkGameOver(list: List<Card>, generation: Long)
+    abstract suspend fun checkGameOver(generation: Long)
 
     /**
-     * Check the validity of the current card list
-     * @param cards The current card list
-     * @param card the current card
-     * @param lastCard The lastCard
-     * Validity is checked in group, position order. This method is called once for each card.
+     * Check the validity of the current card list and groups
+     * @return Error string if something is wrong, or null if all is OK
      */
-    abstract fun isValid(cards: List<Card>, card: Card, lastCard: Card?): String?
+    abstract fun isValid(): String?
 
     companion object {
         const val CARDS_PER_SUIT: Int = 13

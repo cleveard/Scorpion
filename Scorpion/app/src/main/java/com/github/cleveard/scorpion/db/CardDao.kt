@@ -115,7 +115,7 @@ data class Card(
         }
         val down = if (faceDown) "Face down" else "Face up"
         val spr = if (spread) "Spread" else "Stacked"
-        return "$card of $suit, gen=$generation, pos=($group,$position), hlt=$highlight, $down, $spr"
+        return "$card of $suit($value), gen=$generation, pos=($group,$position), hlt=$highlight, $down, $spr"
     }
 
     companion object {
