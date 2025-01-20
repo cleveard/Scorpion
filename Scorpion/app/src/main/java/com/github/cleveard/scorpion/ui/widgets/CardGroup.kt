@@ -3,8 +3,11 @@ package com.github.cleveard.scorpion.ui.widgets
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -12,7 +15,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.github.cleveard.scorpion.db.Card
 import com.github.cleveard.scorpion.ui.games.Game
@@ -29,17 +34,17 @@ object CardGroup {
     fun ColumnContent(
         cards: List<Card?>,
         game: Game,
+        size: DpSize,
         modifier: Modifier = Modifier,
+        cardPadding: PaddingValues = PaddingValues(0.dp),
+        verticalArrangement: Arrangement.Vertical = Arrangement.Top,
     ) {
         Column(
             modifier = modifier,
-            verticalArrangement = Arrangement.spacedBy(
-                game.measurements.verticalSpacing.spaceBy()
-            )
+            verticalArrangement = verticalArrangement
         ) {
             // Set the height and width of the card
-            val imageModifier = Modifier.size(game.measurements.horizontalSpacing.size * game.measurements.scale,
-                game.measurements.verticalSpacing.size * game.measurements.scale)
+            val imageModifier = Modifier.size(size)
             // Add all of the cards to the columns
             for (card in cards) {
                 // Only add the card if it is null or the next card is null or the next card has spread set
@@ -52,7 +57,8 @@ object CardGroup {
                     GetImage(
                         card,
                         game,
-                        modifier = imageModifier
+                        modifier = imageModifier,
+                        cardPadding = cardPadding
                     )
                 }
             }
@@ -66,7 +72,10 @@ object CardGroup {
     fun RowContent(
         cards: List<Card?>,
         game: Game,
-        modifier: Modifier = Modifier
+        size: DpSize,
+        modifier: Modifier = Modifier,
+        cardPadding: PaddingValues = PaddingValues(0.dp),
+        horizontalArrangement: Arrangement.Horizontal = Arrangement.Start,
     ) {
         // Always layout the cards left-to-right, because the card value is always on the
         // left side of the card. If the cards overlap, we want the card on top to be offset
@@ -74,13 +83,10 @@ object CardGroup {
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
             Row(
                 modifier = modifier,
-                horizontalArrangement = Arrangement.spacedBy(
-                    game.measurements.horizontalSpacing.spaceBy()
-                )
+                horizontalArrangement = horizontalArrangement
             ) {
                 // Set the height and width of the card
-                val imageModifier = Modifier.size(game.measurements.horizontalSpacing.size * game.measurements.scale,
-                    game.measurements.verticalSpacing.size * game.measurements.scale)
+                val imageModifier = Modifier.size(size)
                 // Add all of the cards to the row
                 for (card in cards) {
                     // Only add the card if it is null or the next card is null or the next card has spread set
@@ -93,7 +99,8 @@ object CardGroup {
                         GetImage(
                             card,
                             game,
-                            modifier = imageModifier
+                            modifier = imageModifier,
+                            cardPadding = cardPadding
                         )
                     }
                 }
@@ -106,41 +113,44 @@ object CardGroup {
      * @param card The card to add, or null to add a spacer
      * @param game The game interface
      * @param modifier Used to set the width and height of the composable
+     * @param cardPadding The padding around the card
      */
     @OptIn(ExperimentalFoundationApi::class)
     @Composable
     private fun GetImage(
         card: Card?,
         game: Game,
-        @Suppress("UNUSED_PARAMETER") modifier: Modifier = Modifier
+        modifier: Modifier = Modifier,
+        cardPadding: PaddingValues = PaddingValues(0.dp)
     ) {
-        // If card is null, return, the composable modifier will take up space
-        if (card == null)
-            return
-
-        // The filter to apply to the image
-        var filter: ColorFilter? = null
-        // Get the asset path for the image
-        val resourcePath = if (card.faceDown)
-            game.cardBackAssetPath      // Card back asset path
-        else {
-            // Get the filter for the highlight
-            filter = game.getFilter(card.highlight)
-            // Get the card front asset path
-            game.cardFrontAssetPath(card.value)
+        Box(modifier = modifier.padding(cardPadding)) {
+            // If card is null, return, the composable modifier will take up space
+            if (card != null) {
+                // The filter to apply to the image
+                var filter: ColorFilter? = null
+                // Get the asset path for the image
+                val resourcePath = if (card.faceDown)
+                    game.cardBackAssetPath      // Card back asset path
+                else {
+                    // Get the filter for the highlight
+                    filter = game.getFilter(card.highlight)
+                    // Get the card front asset path
+                    game.cardFrontAssetPath(card.value)
+                }
+                // Add a onClick and onDoubleClick handlers
+                val combinedModifier = modifier.combinedClickable(
+                    onClick = { game.onClick(card) },
+                    onDoubleClick = { game.onDoubleClick(card) }
+                )
+                // Get the image
+                AsyncImage(
+                    resourcePath,
+                    contentDescription = "",
+                    contentScale = ContentScale.Fit,
+                    modifier = combinedModifier,
+                    colorFilter = filter,
+                )
+            }
         }
-        // Add a onClick and onDoubleClick handlers
-        val combinedModifier = Modifier.combinedClickable(
-                onClick = { game.onClick(card) },
-                onDoubleClick = { game.onDoubleClick(card) }
-            )
-        // Get the image
-        AsyncImage(
-            resourcePath,
-            contentDescription = "",
-            contentScale = ContentScale.Fit,
-            modifier = combinedModifier,
-            colorFilter = filter,
-        )
     }
 }

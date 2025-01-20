@@ -23,10 +23,8 @@ interface Dealer {
     val cardBackAssetPath: String
     /** True to use the personal colors for the theme */
     val useSystemTheme: Boolean
-    /** The unscaled width of cards */
-    val cardWidth: Int
-    /** The unscaled height of cards */
-    val cardHeight: Int
+    /** The aspect ratio of the card */
+    val cardAspect: Float
     /**
      * Show dialog
      * Set this to a non null value to show dialog. The content of the dialog

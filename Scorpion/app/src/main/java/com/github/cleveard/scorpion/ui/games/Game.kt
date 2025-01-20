@@ -1,5 +1,6 @@
 package com.github.cleveard.scorpion.ui.games
 
+import androidx.compose.foundation.layout.BoxWithConstraintsScope
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ColorFilter
@@ -7,13 +8,10 @@ import com.github.cleveard.scorpion.db.Card
 import com.github.cleveard.scorpion.db.StateEntity
 import com.github.cleveard.scorpion.ui.Actions
 import com.github.cleveard.scorpion.ui.DialogContent
-import com.github.cleveard.scorpion.ui.widgets.LayoutMeasurements
 
 sealed class Game(
     /** The state of the game */
     val state: StateEntity,
-    /** Layout measurements used to layout card groups */
-    val measurements: LayoutMeasurements,
     /** The qualified class name of the game */
     val name: String,
     /** The number of groups in the game */
@@ -42,7 +40,7 @@ sealed class Game(
      * @param modifier The modifier for the composable
      */
     @Composable
-    abstract fun Content(modifier: Modifier)
+    abstract fun BoxWithConstraintsScope.Content(modifier: Modifier)
 
     /**
      * Game content for the variant dialog

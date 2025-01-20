@@ -28,4 +28,5 @@
     <string name="move_kitty_when_flipped">Cards in the kitty are flipped in place.</string>
     <string name="hidden_cards_3_columns">Three columns have face down cards in them.</string>
     <string name="king_moves_alone">The king moves alone to empty columns.</string>
+    <string name="pyramid">Pyramid</string>
 </resources>

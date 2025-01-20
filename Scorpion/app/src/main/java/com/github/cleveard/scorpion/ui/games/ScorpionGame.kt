@@ -1,10 +1,11 @@
 package com.github.cleveard.scorpion.ui.games
 
-import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraintsScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -25,6 +26,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.coerceAtLeast
 import androidx.compose.ui.unit.dp
 import com.github.cleveard.scorpion.R
 import com.github.cleveard.scorpion.db.Card
@@ -32,7 +35,6 @@ import com.github.cleveard.scorpion.db.StateEntity
 import com.github.cleveard.scorpion.ui.Dealer
 import com.github.cleveard.scorpion.ui.DialogContent
 import com.github.cleveard.scorpion.ui.widgets.CardGroup
-import com.github.cleveard.scorpion.ui.widgets.LayoutMeasurements
 import com.github.cleveard.scorpion.ui.widgets.TextSwitch
 import kotlinx.coroutines.launch
 
@@ -75,22 +77,12 @@ import kotlinx.coroutines.launch
  *     The other cheat allows you to move a single card to the card one above it, even
  *     if it isn't at the bottom of a column. Kings are moved above the corresponding queen.
  */
-@Suppress("unused")
 class ScorpionGame(
     private val dealer: Dealer,
     state: StateEntity
 ): Game(
     // Game state entity
     state,
-    // Layout measurements
-    LayoutMeasurements().apply {
-        // Space vertically 15% minimum of .3 inches
-        verticalSpacing.minimum = Dp(0.3f * 160.0f)
-        verticalSpacing.ratio = 0.15f
-        // Space horizontally 15% minimum of .3 inches
-        horizontalSpacing.minimum = Dp(0.3f * 160.0f)
-        horizontalSpacing.ratio = 0.15f
-    },
     // Qualified class name
     ScorpionGame::class.qualifiedName!!,
     // Number of groups for the game
@@ -318,63 +310,61 @@ class ScorpionGame(
 
     /** @inheritDoc */
     @Composable
-    override fun Content(modifier: Modifier) {
-        // Get the height and width of the cards
-        measurements.verticalSpacing.size = dealer.cardHeight.dp
-        measurements.horizontalSpacing.size = dealer.cardWidth.dp
+    override fun BoxWithConstraintsScope.Content(modifier: Modifier) {
+        // TODO: Need to set maximum sizes for larger screens
+        // Portrait makes two rows, one for the kitty and one for the columns
+        // Landscape puts the columns and kitty in one row
+        val twoRows = maxHeight > maxWidth
+        // The number of columns across the playing surface
+        val cols = if (twoRows) GROUP_COUNT - 1 else GROUP_COUNT
+        // The width of each column
+        val colWidth = maxWidth / cols
+        // The size of the card with padding
+        val size = DpSize(colWidth, (colWidth - padding * 2) / dealer.cardAspect + padding * 2)
+        val spacing = DpSize(
+            ((size.width - padding * 2) * EXPOSE_RATIO).coerceAtLeast(MINIMUM_EXPOSE),
+            ((size.height - padding * 2) * EXPOSE_RATIO).coerceAtLeast(MINIMUM_EXPOSE)
+        ) - size
 
-        // Use a BoxWithConstraints to get the max width and height for the playing surface
-        BoxWithConstraints(
-            modifier = modifier
-                .fillMaxSize()
+        // Wrap everything in a column that we can scroll
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
         ) {
-            // TODO: Need to set maximum sizes for larger screens
-            // Portrait makes two rows, one for the kitty and one for the columns
-            // Landscape puts the columns and kitty in one row
-            val twoRows = maxHeight > maxWidth
-            // The number of columns across the playing surface
-            val cols = if (twoRows) GROUP_COUNT - 1 else GROUP_COUNT
-            // The width of each column
-            val colWidth = maxWidth / cols
-            // The scale needed for the desired width
-            measurements.scale = (colWidth - padding) / measurements.horizontalSpacing.size
+            // Put the kitty in a separate row if needed
+            if (twoRows) {
+                CardGroup.RowContent(
+                    dealer.cards[KITTY_GROUP],
+                    this@ScorpionGame,
+                    size,
+                    cardPadding = PaddingValues(padding),
+                    horizontalArrangement = Arrangement.spacedBy(spacing.width),
+                    modifier = Modifier
+                        .height(size.height)
+                        .align(Alignment.End)
+                )
+            }
 
-            // Wrap everything in a column that we can scroll
-            Column(
+            // Put the other columns in another row and the kitty column if only one row
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
+                    .align(Alignment.Start)
             ) {
-                // Put the kitty in a separate row if needed
-                if (twoRows) {
-                    CardGroup.RowContent(
-                        dealer.cards[KITTY_GROUP],
-                        this@ScorpionGame,
-                        modifier = Modifier
-                            .height(measurements.verticalSpacing.size * measurements.scale + padding)
-                            .align(Alignment.End)
-                            .padding(padding)
-                    )
-                }
-
-                // Put the other columns in another row and the kitty column if only one row
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .align(Alignment.Start)
-                ) {
-                    for (group in dealer.cards.indices) {
-                        // Include the kitty column if not two rows
-                        if (group != KITTY_GROUP || !twoRows) {
-                            CardGroup.ColumnContent(
-                                dealer.cards[group],
-                                this@ScorpionGame,
-                                modifier = Modifier
-                                    .width(colWidth)
-                                    .align(Alignment.Top)
-                                    .padding(padding)
-                            )
-                        }
+                for (group in dealer.cards.indices) {
+                    // Include the kitty column if not two rows
+                    if (group != KITTY_GROUP || !twoRows) {
+                        CardGroup.ColumnContent(
+                            dealer.cards[group],
+                            this@ScorpionGame,
+                            size,
+                            cardPadding = PaddingValues(padding),
+                            verticalArrangement = Arrangement.spacedBy(spacing.height),
+                            modifier = Modifier
+                                .width(size.width)
+                                .align(Alignment.Top)
+                        )
                     }
                 }
             }
@@ -841,6 +831,9 @@ class ScorpionGame(
         private const val HIDDEN_CARD_COLUMN_COUNT: String = "hidden_card_column_count"
         /** Key for the flag to move kings by themselves. */
         private const val KING_MOVES_ALONE: String = "king_moves_alone"
+
+        private const val EXPOSE_RATIO: Float = 0.15f
+        private val MINIMUM_EXPOSE: Dp = 160.dp * 0.3f
 
         /** The filter used for the highlights */
         private val filters: List<ColorFilter?> = listOf(

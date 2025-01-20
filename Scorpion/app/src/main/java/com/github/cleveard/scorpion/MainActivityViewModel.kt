@@ -129,11 +129,8 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
     override val useSystemTheme: Boolean
         get() = _useSystemTheme.value
     /** @inheritDoc */
-    override val cardWidth: Int
-        get() = MainActivityViewModel.cardWidth
-    /** @inheritDoc */
-    override val cardHeight: Int
-        get() = MainActivityViewModel.cardHeight
+    override val cardAspect: Float
+        get() = MainActivityViewModel.cardAspect
     /** Mutable state for the current game generation */
     private var generation: MutableState<Long> = mutableLongStateOf(0L)
     /** Mutable state for the smallest valid game generation */
@@ -154,7 +151,8 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
     private val previousHighlight: MutableList<HighlightEntity> = mutableListOf()
     /** The withUndo nesting level */
     private var undoNesting: Int = 0
-    /** Did a card flip in the previous */
+    /** Have we initialized the view model */
+    private var initialized: Boolean = false
 
     /** @inheritDoc */
     override val cards: List<List<Card?>>
@@ -280,7 +278,7 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
         val value = showDialog(R.string.settings, R.string.dismiss, R.string.accept) {
             // Width and height for the card backs
             val width = Dp(.4f * 160.0f)
-            val height = width * (cardHeight.toFloat() / cardWidth.toFloat())
+            val height = width / cardAspect
             // Header for the card backs
             Text(
                 stringResource(R.string.card_back_image),
@@ -911,55 +909,59 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
     fun initialize(callback: () -> Unit) {
         // Launch a coroutine to initialize the viewmodel
         viewModelScope.launch {
-            // We may update the database, so start a transaction
-            CardDatabase.db.withTransaction {
-                // All games are subclasses of Game
-                Game::class.sealedSubclasses.forEach {clazz ->
-                    // Try to make the game
-                    makeGame(clazz)?.let {
-                        // It worked add it to the game list
-                        games.add(it)
-                    }
-                }
-
-                // Did we get any games>
-                if (games.isEmpty())
-                    throw IllegalStateException("No game to be played")     // No throw an exception
-
-                val stateDao = CardDatabase.db.getStateDao()
-                // Preload card front and back images
-                preloadCards(getApplication())
-                // Have we initialized the commonState
-                if (!::commonState.isInitialized) {
-                    // No, get it from the state table
-                    commonState = stateDao.get(COMMON_STATE_NAME) ?: run {
-                        // First run - add a common state entity to the state table
-                        StateEntity(0L, COMMON_STATE_NAME, Bundle()).also {
-                            CardDatabase.db.getStateDao().insert(it)
+            if (!initialized) {
+                // We may update the database, so start a transaction
+                CardDatabase.db.withTransaction {
+                    // All games are subclasses of Game
+                    Game::class.sealedSubclasses.forEach { clazz ->
+                        // Try to make the game
+                        makeGame(clazz)?.let {
+                            // It worked add it to the game list
+                            games.add(it)
                         }
                     }
+
+                    // Did we get any games>
+                    if (games.isEmpty())
+                        throw IllegalStateException("No game to be played")     // No throw an exception
+
+                    val stateDao = CardDatabase.db.getStateDao()
+                    // Preload card front and back images
+                    preloadCards(getApplication())
+                    // Have we initialized the commonState
+                    if (!::commonState.isInitialized) {
+                        // No, get it from the state table
+                        commonState = stateDao.get(COMMON_STATE_NAME) ?: run {
+                            // First run - add a common state entity to the state table
+                            StateEntity(0L, COMMON_STATE_NAME, Bundle()).also {
+                                CardDatabase.db.getStateDao().insert(it)
+                            }
+                        }
+                    }
+
+                    // Set the state from the bundle
+                    setState(commonState.bundle)
+                    // Get the game qualified name from the bundle and find it
+                    // in the games list or make the default game, or use the first
+                    // game in the games list.
+                    val nextGame = commonState.bundle.getString(GAME_NAME_KEY)?.let { name ->
+                        games.firstOrNull { it.name == name }
+                    } ?: games.firstOrNull { it.name.endsWith(DEFAULT_GAME) }
+                    ?: games[0]
+
+                    // If the game is initialized, set the game
+                    // or create a mutable state object if not
+                    if (::_game.isInitialized)
+                        _game.value = nextGame
+                    else
+                        _game = mutableStateOf(nextGame)
                 }
-
-                // Set the state from the bundle
-                setState(commonState.bundle)
-                // Get the game qualified name from the bundle and find it
-                // in the games list or make the default game, or use the first
-                // game in the games list.
-                val nextGame = commonState.bundle.getString(GAME_NAME_KEY)?.let {name ->
-                    games.firstOrNull { it.name == name }
-                }?: games.firstOrNull { it.name.endsWith(DEFAULT_GAME) }
-                ?: games[0]
-
-                // If the game is initialized, set the game
-                // or create a mutable state object if not
-                if (::_game.isInitialized)
-                    _game.value = nextGame
-                else
-                    _game = mutableStateOf(nextGame)
+                initialized = true
             }
 
             // Reset the game from the database
             resetGame()
+
             // Call the callback
             callback()
         }
@@ -980,9 +982,7 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
         // The name used to store the view model state in the database
         private val COMMON_STATE_NAME = MainActivityViewModel::class.qualifiedName!!
         // The built in card width and height. These are set when the cards are preloaded
-        var cardWidth: Int = 234
-            private set
-        var cardHeight: Int = 333
+        var cardAspect: Float = 234.0f / 333.0f
             private set
         // The path the the asset folder
         private const val ASSET_PATH = "file:///android_asset/"
@@ -1112,8 +1112,7 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
 
                             override fun onSuccess(result: Image) {
                                 // Set the real width and height and resume the coroutine
-                                cardWidth = result.width
-                                cardHeight = result.height
+                                cardAspect = result.width.toFloat() / result.height.toFloat()
                                 it.resume(Unit)
                             }
                         })
