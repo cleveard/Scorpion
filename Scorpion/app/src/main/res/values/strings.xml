@@ -29,4 +29,7 @@
     <string name="hidden_cards_3_columns">Three columns have face down cards in them.</string>
     <string name="king_moves_alone">The king moves alone to empty columns.</string>
     <string name="pyramid">Pyramid</string>
+    <string name="pass_cards_twice">Pass through the deck two times.</string>
+    <string name="clear_pyramid_wins">Win when you clear the cards in the pyramid.</string>
+    <string name="play_partial_covers">Play two cards if the lower card is the only one covering the upper card.</string>
 </resources>

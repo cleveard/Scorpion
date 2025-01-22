@@ -250,6 +250,14 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
                 commonState.bundle.putString(GAME_NAME_KEY, selectedGame.value.second.name)
                 commonState.onBundleUpdated()
                 CardDatabase.db.getStateDao().update(commonState.game, commonState.state)
+
+                val groupCount = selectedGame.value.second.groupCount
+                // First make sure we have exactly the right number of groups
+                while (cardGroups.size < groupCount)
+                    cardGroups.add(mutableStateListOf())
+                while (cardGroups.size > groupCount)
+                    cardGroups.removeAt(cardGroups.lastIndex)
+
                 _game.value = selectedGame.value.second
             }
             // Let the game content know the current values were accepted

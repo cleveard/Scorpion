@@ -6,10 +6,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,6 +31,7 @@ import com.github.cleveard.scorpion.db.StateEntity
 import com.github.cleveard.scorpion.ui.Dealer
 import com.github.cleveard.scorpion.ui.DialogContent
 import com.github.cleveard.scorpion.ui.widgets.CardGroup
+import com.github.cleveard.scorpion.ui.widgets.TextSwitch
 import kotlinx.coroutines.launch
 
 class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
@@ -43,6 +47,128 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
     private var clearPyramidOnly: Boolean = state.bundle.getBoolean(CLEAR_PYRAMID_ONLY, true)
     private var playPartialCover: Boolean = state.bundle.getBoolean(PLAY_PARTIAL_COVER, true)
     private var showHighlights: MutableState<Boolean> = mutableStateOf(state.bundle.getBoolean(SHOW_HIGHLIGHTS, true))
+
+    /** Dialog content for the variant dialog */
+    private val variantContent = object: DialogContent {
+        /** Current moveKittyWhenFlipped value */
+        val twoPass = mutableIntStateOf(2)
+        /** Current hiddenCardColumnCount value */
+        val clearPyramidWins = mutableStateOf(true)
+        /** Current kindMovesAlone value  */
+        val playPartial = mutableStateOf(true)
+
+        /** @inheritDoc */
+        @Composable
+        override fun Content(modifier: Modifier) {
+            // Add checkbox for two passes of the cards
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 4.dp))
+            TextSwitch(
+                twoPass.intValue == 2,
+                R.string.pass_cards_twice,
+                onChange = { twoPass.intValue = if (it) 2 else 1 }
+            )
+
+            // Add checkbox to win by clearing the pyramid
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 4.dp))
+            TextSwitch(
+                clearPyramidWins.value,
+                R.string.clear_pyramid_wins,
+                onChange = { clearPyramidWins.value = it }
+            )
+
+            // Add checkbox to allow playing partial covers
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 4.dp))
+            TextSwitch(
+                playPartial.value,
+                R.string.play_partial_covers,
+                onChange = { playPartial.value = it }
+            )
+        }
+
+        /** @inheritDoc */
+        override suspend fun onDismiss() {
+        }
+
+        /** @inheritDoc */
+        override suspend fun onAccept() {
+            // Accepted update the changed values in the bundle and notice if it has changed
+            var update = (stockPassCount != twoPass.intValue).also {
+                if (it) {
+                    stockPassCount = twoPass.intValue
+                    state.bundle.putInt(STOCK_PASS_COUNT, stockPassCount)
+                }
+            }
+            update = (clearPyramidOnly != clearPyramidWins.value).also {
+                if (it) {
+                    clearPyramidOnly = clearPyramidWins.value
+                    state.bundle.putBoolean(CLEAR_PYRAMID_ONLY, clearPyramidOnly)
+                }
+            } || update
+            update = (playPartialCover != playPartial.value).also {
+                if (it) {
+                    playPartialCover = playPartial.value
+                    state.bundle.putBoolean(PLAY_PARTIAL_COVER, playPartialCover)
+                }
+            } || update
+
+            // Update the database if needed
+            if (update)
+                dealer.onStateChanged(state)
+        }
+
+        /** @inheritDoc */
+        override fun reset() {
+            // Reset current values to values from game
+            twoPass.intValue = stockPassCount
+            clearPyramidWins.value = clearPyramidOnly
+            playPartial.value = playPartialCover
+        }
+    }
+
+    /** Content for the settings dialog */
+    private val settingsContent = object: DialogContent {
+        /** Current value of showHighlights */
+        val showHints = mutableStateOf(false)
+
+        /** @inheritDoc */
+        @Composable
+        override fun Content(modifier: Modifier) {
+            // Add the checkbox for showHighlights
+            HorizontalDivider()
+            TextSwitch(
+                showHints.value,
+                R.string.show_highlights,
+                onChange = { showHints.value = it }
+            )
+        }
+
+        /** @inheritDoc */
+        override suspend fun onDismiss() {
+        }
+
+        /** @inheritDoc */
+        override suspend fun onAccept() {
+            // Update showHighlights in the bundle
+            var update = false
+            update = (showHints.value != showHighlights.value).also {
+                if (it) {
+                    showHighlights.value = showHints.value
+                    state.bundle.putBoolean(SHOW_HIGHLIGHTS, showHints.value)
+                }
+            } || update
+
+            // Update the database if needed
+            if (update)
+                dealer.onStateChanged(state)
+        }
+
+        /** @inheritDoc */
+        override fun reset() {
+            // Reset the current values to the values from the game
+            showHints.value = showHighlights.value
+        }
+    }
+
     override val cardBackAssetPath: String
         get() = dealer.cardBackAssetPath
 
@@ -189,12 +315,12 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
         }
     }
 
-    override fun variantContent(): DialogContent? {
-        return null
+    override fun variantContent(): DialogContent {
+        return variantContent
     }
 
-    override fun settingsContent(): DialogContent? {
-        return null
+    override fun settingsContent(): DialogContent {
+        return settingsContent
     }
 
     override fun getFilter(highlight: Int): ColorFilter? {
@@ -267,7 +393,7 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
                     return it         // Both cards are playable
             } else if (!matchPlayable)
                 return null            // Neither card is playable
-            else if (!playPartialCover)
+            if (!playPartialCover)
                 return null            // Don't allow partial covers
             else if (group >= ROW_COUNT || it.group >= ROW_COUNT)
                 return null            // Partial cover only works if both cards are in the pyramid
