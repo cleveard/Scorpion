@@ -32,9 +32,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -61,6 +59,8 @@ import com.github.cleveard.scorpion.db.StateEntity
 import com.github.cleveard.scorpion.ui.games.Game
 import com.github.cleveard.scorpion.ui.Dealer
 import com.github.cleveard.scorpion.ui.DialogContent
+import com.github.cleveard.scorpion.ui.widgets.CardDrawable
+import com.github.cleveard.scorpion.ui.widgets.CardGroup
 import com.github.cleveard.scorpion.ui.widgets.TextRadioButton
 import com.github.cleveard.scorpion.ui.widgets.TextSwitch
 import kotlinx.coroutines.CoroutineScope
@@ -93,7 +93,7 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
      * The cards ordered in their groups
      * Note that the groups are state lists so the display is updated as they are changed
      */
-    private val cardGroups: MutableList<SnapshotStateList<Card?>> = mutableListOf()
+    private val cardGroups: MutableList<CardGroup> = mutableListOf()
 
     /** Mutable state for the current alert dialog */
     private val alert: MutableState<(@Composable () -> Unit)?> = mutableStateOf(null)
@@ -155,7 +155,7 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
     private var initialized: Boolean = false
 
     /** @inheritDoc */
-    override val cards: List<List<Card?>>
+    override val cards: List<CardGroup>
         get() = cardGroups
 
     /** The state object maintained for the application */
@@ -254,9 +254,11 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
                 val groupCount = selectedGame.value.second.groupCount
                 // First make sure we have exactly the right number of groups
                 while (cardGroups.size < groupCount)
-                    cardGroups.add(mutableStateListOf())
-                while (cardGroups.size > groupCount)
+                    cardGroups.add(CardGroup())
+                while (cardGroups.size > groupCount) {
+                    cardGroups.last().cards.clear()
                     cardGroups.removeAt(cardGroups.lastIndex)
+                }
 
                 _game.value = selectedGame.value.second
             }
@@ -732,13 +734,13 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
     private suspend fun updateCards(changed: Collection<Card>) {
         // Put a card or null into a card group
         // Position is passed separately, because card may be null.
-        fun SnapshotStateList<Card?>.setCard(position: Int, card: Card?) {
+        fun CardGroup.setCard(position: Int, drawable: CardDrawable) {
             // Add card if we are at the end of the list
-            if (position >= size)
-                add(card)
+            if (position >= cards.size)
+                cards.add(drawable)
             // Otherwise set the card if it has changed
-            else if (this[position] != card)
-                this[position] = card
+            else if (cards[position] != drawable)
+                cards[position] = drawable
         }
 
         val groupCount = game.groupCount
@@ -751,15 +753,17 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
 
         // First make sure we have exactly the right number of groups
         while (cardGroups.size < groupCount)
-            cardGroups.add(mutableStateListOf())
-        while (cardGroups.size > groupCount)
+            cardGroups.add(CardGroup())
+        while (cardGroups.size > groupCount) {
+            cardGroups.last().cards.clear()
             cardGroups.removeAt(cardGroups.lastIndex)
+        }
 
         // Sort the cards by group and position
         val sorted = cardDeck.sortedWith(compareBy({ it.group }, { it.position }))
         var lastGroup = 0           // Track last group set
         var lastPosition = 0        // and the last position set
-        var to: SnapshotStateList<Card?> = cardGroups[sorted.first().group]
+        var to: CardGroup = cardGroups[sorted.first().group]
         // Place each card
         for (card in sorted) {
             // If the group changed, then remove cards that
@@ -773,9 +777,9 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
             }
             // Add nulls if there is a gap in positions
             while (lastPosition < card.position)
-                to.setCard(lastPosition++, null)
+                to.setCard(lastPosition++, CardDrawable(null))
             // Set the card
-            to.setCard(lastPosition++, card)
+            to.setCard(lastPosition++, CardDrawable(card))
         }
 
         // Remove any other cards not needed in groups
@@ -783,7 +787,7 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
 
         // Validity check. Can't use !== because the SnapshotStateList
         // checks for changes using ==
-        if (cardDeck.any { cardGroups[it.group][it.position] != it })
+        if (cardDeck.any { cardGroups[it.group].cards[it.position].card != it })
             inconsistentDatabase("Card deck and groups are out of sync")
         game.isValid().also {
             if (it != null)
@@ -813,7 +817,7 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
                     if (state.generation in dbMinGeneration..dbMaxGeneration) {
                         CardDatabase.db.loadGame(state.generation)?.let { pair ->
                             // Clear current cards in the groups
-                            cardGroups.forEach { it.clear() }
+                            cardGroups.forEach { it.cards.clear() }
                             // Set the list of cards from the database
                             updateCards(pair.first)
                             // Clear highlight list
@@ -854,12 +858,12 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
     private fun removeTails(startGroup: Int, size: Int, endGroup: Int) {
         // Sanity check, should always be true
         if (startGroup < endGroup) {
-            val list = cardGroups[startGroup]
+            val list = cardGroups[startGroup].cards
             // Clear the cards from startGroup past where we have set
             repeat(list.size - size) { list.removeAt(list.lastIndex) }
             // Clear the groups between start group and the next group we are setting
             for (i in startGroup + 1 until endGroup.coerceAtMost(cardGroups.size)) {
-                cardGroups[i].clear()
+                cardGroups[i].cards.clear()
             }
         }
     }

@@ -4,6 +4,8 @@ import androidx.compose.runtime.Composable
 import com.github.cleveard.scorpion.db.Card
 import com.github.cleveard.scorpion.db.StateEntity
 import com.github.cleveard.scorpion.ui.games.Game
+import com.github.cleveard.scorpion.ui.widgets.CardDrawable
+import com.github.cleveard.scorpion.ui.widgets.CardGroup
 import kotlinx.coroutines.CoroutineScope
 
 /**
@@ -18,7 +20,7 @@ interface Dealer {
      * */
     val game: Game
     /** The list of card groups */
-    val cards: List<List<Card?>>
+    val cards: List<CardGroup>
     /** The asset path of the back of a card */
     val cardBackAssetPath: String
     /** True to use the personal colors for the theme */

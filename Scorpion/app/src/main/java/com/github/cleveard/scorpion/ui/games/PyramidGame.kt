@@ -17,7 +17,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draganddrop.DragAndDropEvent
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.BlendModeColorFilter
 import androidx.compose.ui.graphics.Color
@@ -33,7 +32,6 @@ import com.github.cleveard.scorpion.db.StateEntity
 import com.github.cleveard.scorpion.ui.Dealer
 import com.github.cleveard.scorpion.ui.DialogContent
 import com.github.cleveard.scorpion.ui.widgets.CardDropTarget
-import com.github.cleveard.scorpion.ui.widgets.CardGroup
 import com.github.cleveard.scorpion.ui.widgets.TextSwitch
 import kotlinx.coroutines.launch
 
@@ -230,8 +228,7 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
             verticalArrangement = Arrangement.spacedBy((-cardPadding - size.height * 0.5f), Alignment.Top)
         ) {
             for (i in 0..<ROW_COUNT) {
-                CardGroup.RowContent(
-                    dealer.cards[i],
+                dealer.cards[i].RowContent(
                     dealer.game,
                     size = size,
                     modifier = Modifier.size(size.width * (i + 1), size.height),
@@ -252,8 +249,7 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
                 modifier = Modifier.offset(x = pyramidOffset.x, y = offsetY)
                     .width(size.width * 2.0f + stockPadding)
             ) {
-                CardGroup.RowContent(
-                    dealer.cards[STOCK_GROUP],
+                dealer.cards[STOCK_GROUP].RowContent(
                     dealer.game,
                     size = size,
                     modifier = Modifier
@@ -264,8 +260,7 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
                     }
                 )
 
-                CardGroup.RowContent(
-                    dealer.cards[WASTE_GROUP],
+                dealer.cards[WASTE_GROUP].RowContent(
                     dealer.game,
                     size = size,
                     modifier = Modifier
@@ -277,8 +272,7 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
                 )
             }
 
-            CardGroup.RowContent(
-                dealer.cards[DISCARD_GROUP],
+            dealer.cards[DISCARD_GROUP].RowContent(
                 dealer.game,
                 size = size,
                 modifier = Modifier
@@ -299,8 +293,7 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
                 modifier = Modifier.offset(x = endOffsetX - stockWidth, y = pyramidOffset.y)
                     .width(stockWidth)
             ) {
-                CardGroup.RowContent(
-                    dealer.cards[STOCK_GROUP],
+                dealer.cards[STOCK_GROUP].RowContent(
                     dealer.game,
                     size = size,
                     modifier = Modifier
@@ -311,8 +304,7 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
                     }
                 )
 
-                CardGroup.RowContent(
-                    dealer.cards[WASTE_GROUP],
+                dealer.cards[WASTE_GROUP].RowContent(
                     dealer.game,
                     size = size,
                     modifier = Modifier
@@ -324,8 +316,7 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
                 )
             }
 
-            CardGroup.RowContent(
-                dealer.cards[DISCARD_GROUP],
+            dealer.cards[DISCARD_GROUP].RowContent(
                 dealer.game,
                 size = size,
                 modifier = Modifier
@@ -364,13 +355,13 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
             return this
         // The last card in the stock or waste are playable
         if (group == WASTE_GROUP || group == STOCK_GROUP)
-            return if (position == dealer.cards[group].lastIndex) this else null
+            return if (position == dealer.cards[group].cards.lastIndex) this else null
         if (group >= ROW_COUNT - 1)
             return null
         // Get the row below the card's row
         val cover = dealer.cards[group + 1]
         // If there is a card a position or position + 1 then this card is not playable
-        return if (cover.getOrNull(position) != null || cover.getOrNull(position + 1) != null)
+        return if (cover.cards.getOrNull(position)?.card != null || cover.cards.getOrNull(position + 1)?.card != null)
             null
         else
             this
@@ -451,9 +442,9 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
         return notPlayCard.group + 1 == playCard.group &&
             notPlayCard.position.let {pos ->
                 // Either playCard is at position and the card at position + 1 is null
-                (pos == playCard.position && dealer.cards[playCard.group].getOrNull(playCard.position + 1) == null) ||
+                (pos == playCard.position && dealer.cards[playCard.group].cards.getOrNull(playCard.position + 1)?.card == null) ||
                     // or playCard is at position + 1 and the card at position is null
-                    (pos + 1 == playCard.position && dealer.cards[playCard.group][playCard.position - 1] == null)
+                    (pos + 1 == playCard.position && dealer.cards[playCard.group].cards[playCard.position - 1].card == null)
             }
     }
 
@@ -472,7 +463,7 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
         
         // If clearing the pyramid is a win and it is clear, then let the user know
         // This relies on the dealer to empty groups with no cards in them
-        if (dealer.cards[0].isEmpty() && clearPyramidOnly) {
+        if (dealer.cards[0].cards.isEmpty() && clearPyramidOnly) {
             dealer.showNewGameOrDismissAlert(R.string.game_won, R.string.congratulations)
             return
         }
@@ -481,7 +472,7 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
         val waste = dealer.cards[WASTE_GROUP]
 
         // If there are cards in the stock, the game isn't over
-        if (stock.isNotEmpty())
+        if (stock.cards.isNotEmpty())
             return
 
         // Array of ways to sum cards to 13
@@ -489,15 +480,15 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
         sum13[0] = LESS_THAN_7
         val playableCards = mutableMapOf<Int, Card>()
         // Include top card of stock and waste
-        if (stock.lastOrNull()?.markSum(sum13, playableCards) == true ||
-            waste.lastOrNull()?.markSum(sum13, playableCards) == true)
+        if (stock.cards.lastOrNull()?.card?.markSum(sum13, playableCards) == true ||
+            waste.cards.lastOrNull()?.card?.markSum(sum13, playableCards) == true)
             return      // Sum to 13, game isn't over
         // Loop through the cards in pyramid
         (0..<ROW_COUNT).forEach {group ->
             val row = dealer.cards[group]
             // Check whether we have a pair or playable cards that sum to 13
-            row.forEach {
-                if (it?.playable()?.markSum(sum13, playableCards) == true)
+            row.cards.forEach {
+                if (it.card?.playable()?.markSum(sum13, playableCards) == true)
                     return      // Sum to 13 game isn't over
             }
         }
@@ -506,18 +497,18 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
         if (playPartialCover) {
             playableCards.values.forEach { card ->
                 if (card.group > 0) {
-                    val group = dealer.cards[card.group]
+                    val group = dealer.cards[card.group].cards
                     // First check the card covered on the right side
-                    if (card.position < group.lastIndex && group[card.position] == null) {
+                    if (card.position < group.lastIndex && group[card.position].card == null) {
                         // Calculate sum
-                        val sum = dealer.cards[card.group - 1][card.position]!!.value + card.value
+                        val sum = dealer.cards[card.group - 1].cards[card.position].card!!.value + card.value
                         if (sum % CARDS_PER_SUIT == CARDS_PER_SUIT - 1)
                             return              // Sum to 13 - game not over
                     }
                     // Next check the card covered on the left side
-                    if (card.position > 0 && group[card.position - 1] == null) {
+                    if (card.position > 0 && group[card.position - 1].card == null) {
                         // Calculate sum
-                        val sum = dealer.cards[card.group - 1][card.position - 1]!!.value + card.value
+                        val sum = dealer.cards[card.group - 1].cards[card.position - 1].card!!.value + card.value
                         if (sum % CARDS_PER_SUIT == CARDS_PER_SUIT - 2)
                             return              // Sum to 13 - game not over
                     }
@@ -526,11 +517,11 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
         }
 
         // Can we go through the cards again
-        if (dealer.cards[WASTE_GROUP].size > 1 && dealer.cards[STOCK_GROUP].isEmpty() && stockPasses + 1 < stockPassCount)
+        if (dealer.cards[WASTE_GROUP].cards.size > 1 && dealer.cards[STOCK_GROUP].cards.isEmpty() && stockPasses + 1 < stockPassCount)
             return      // Yes, game not over
 
         // The game is over, did we win
-        if (dealer.cards[DISCARD_GROUP].size == CARD_COUNT) {
+        if (dealer.cards[DISCARD_GROUP].cards.size == CARD_COUNT) {
             // Yes, let the user know
             dealer.showNewGameOrDismissAlert(R.string.game_won, R.string.congratulations)
         } else {
@@ -541,26 +532,26 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
 
     private suspend fun wasteToStock(generation: Long): Boolean {
         val waste = dealer.cards[WASTE_GROUP]
-        val wasteSize = waste.size
+        val wasteSize = waste.cards.size
         // Should we take the cards from the waste and try some more
-        return(wasteSize > 1 && dealer.cards[STOCK_GROUP].isEmpty() && stockPasses + 1 < stockPassCount).also {
+        return(wasteSize > 1 && dealer.cards[STOCK_GROUP].cards.isEmpty() && stockPasses + 1 < stockPassCount).also {
             ++stockPasses
             state.bundle.putInt(STOCK_PASSES, stockPasses)
             dealer.onStateChanged(state)
             if (it) {
                 (2..<wasteSize).forEach {i ->
-                    waste[i]?.let { w -> w.changed(generation = generation, group = STOCK_GROUP, position = wasteSize - 1 - w.position, faceDown = true, spread = false) }
+                    waste.cards[i].card?.let { w -> w.changed(generation = generation, group = STOCK_GROUP, position = wasteSize - 1 - w.position, faceDown = true, spread = false) }
                 }
-                waste[1]?.let { w -> w.changed(generation = generation, group = STOCK_GROUP, position = wasteSize - 1 - w.position, faceDown = false, spread = false) }
+                waste.cards[1].card?.let { w -> w.changed(generation = generation, group = STOCK_GROUP, position = wasteSize - 1 - w.position, faceDown = false, spread = false) }
             }
         }
     }
 
     override fun isValid(): String? {
         return when {
-            dealer.cards[STOCK_GROUP].any { it == null } -> "Stock has a null card"
-            dealer.cards[WASTE_GROUP].any { it == null } -> "Waste has a null card"
-            dealer.cards[DISCARD_GROUP].any { it == null } -> "Discard has a null card"
+            dealer.cards[STOCK_GROUP].cards.any { it.card == null } -> "Stock has a null card"
+            dealer.cards[WASTE_GROUP].cards.any { it.card == null } -> "Waste has a null card"
+            dealer.cards[DISCARD_GROUP].cards.any { it.card == null } -> "Discard has a null card"
             else -> null
         }
     }
@@ -568,8 +559,8 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
     private fun playCard(card: Card, group: Int, pos: Int, generation: Long) {
         card.changed(generation = generation, group = group,
             position = pos, highlight = Card.HIGHLIGHT_NONE, faceDown = false, spread = false)
-        if (card.group == STOCK_GROUP && dealer.cards[STOCK_GROUP].size > 1) {
-            dealer.cards[STOCK_GROUP].let { it[it.lastIndex - 1]?.changed(generation = generation,
+        if (card.group == STOCK_GROUP && dealer.cards[STOCK_GROUP].cards.size > 1) {
+            dealer.cards[STOCK_GROUP].let { it.cards[it.cards.lastIndex - 1].card?.changed(generation = generation,
                 highlight = Card.HIGHLIGHT_NONE, faceDown = false, spread = false) }
         }
     }
@@ -581,7 +572,7 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
                 // Is this card playable
                 if (match != null) {
                     // Keep track of position for played cards
-                    var pos = dealer.cards[DISCARD_GROUP].size
+                    var pos = dealer.cards[DISCARD_GROUP].cards.size
                     // Is the card a king
                     if (match == card) {
                         // This is a king, just play it
@@ -616,7 +607,7 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
             // the top card of the stock to the waste
             dealer.withUndo {generation ->
                 if (card.group == STOCK_GROUP) {
-                    playCard(card, WASTE_GROUP, dealer.cards[WASTE_GROUP].size, generation = generation)
+                    playCard(card, WASTE_GROUP, dealer.cards[WASTE_GROUP].cards.size, generation = generation)
                 } else if (card.group == WASTE_GROUP)
                     wasteToStock(generation)
             }
@@ -659,13 +650,13 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
         when {
             (card.group == STOCK_GROUP) ||
                 (card.group == WASTE_GROUP) -> {
-                if (dealer.cards[card.group].lastIndex != card.position)
+                if (dealer.cards[card.group].cards.lastIndex != card.position)
                     return this
             }
             (card.group >= ROW_COUNT) -> return this
         }
 
-        return with(CardGroup) {
+        return with(dealer.cards[card.group]) {
             clickGestures(card, this@PyramidGame)
         }
     }
@@ -677,18 +668,18 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
         if ((card.group == STOCK_GROUP ||
                 card.group == WASTE_GROUP ||
                 card.group == DISCARD_GROUP) &&
-            dealer.cards[card.group].lastIndex != card.position)
+            dealer.cards[card.group].cards.lastIndex != card.position)
             return this
 
-        return with(CardGroup) {
+        return with(dealer.cards[card.group]) {
             dragTargetCard(card, object : CardDropTarget {
                 override fun onDrop(sourceCard: Card, targetCard: Card, event: DragAndDropEvent): Boolean {
                     return when {
                         (((sourceCard.value + targetCard.value) % CARDS_PER_SUIT) == CARDS_PER_SUIT - 2) && sourceCard.playable(targetCard) -> {
                             dealer.scope.launch {
                                 dealer.withUndo { generation ->
-                                    playCard(targetCard, DISCARD_GROUP, dealer.cards[DISCARD_GROUP].size, generation)
-                                    playCard(sourceCard, DISCARD_GROUP, dealer.cards[DISCARD_GROUP].size + 1, generation)
+                                    playCard(targetCard, DISCARD_GROUP, dealer.cards[DISCARD_GROUP].cards.size, generation)
+                                    playCard(sourceCard, DISCARD_GROUP, dealer.cards[DISCARD_GROUP].cards.size + 1, generation)
                                 }
                             }
                             true
@@ -696,7 +687,7 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
                         targetCard.group == DISCARD_GROUP && sourceCard.value % CARDS_PER_SUIT == CARDS_PER_SUIT - 1 -> {
                             dealer.scope.launch {
                                 dealer.withUndo { generation ->
-                                    playCard(sourceCard, DISCARD_GROUP, dealer.cards[DISCARD_GROUP].size, generation)
+                                    playCard(sourceCard, DISCARD_GROUP, dealer.cards[DISCARD_GROUP].cards.size, generation)
                                 }
                             }
                             true
@@ -716,12 +707,12 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
         when {
             (card.group == STOCK_GROUP) ||
                 (card.group == WASTE_GROUP) -> {
-                if (dealer.cards[card.group].lastIndex != card.position)
+                if (dealer.cards[card.group].cards.lastIndex != card.position)
                     return this
             }
             (card.group >= ROW_COUNT) -> return this
         }
-        return with(CardGroup) {
+        return with(dealer.cards[card.group]) {
             dragSourceCard(card)
         }
     }
