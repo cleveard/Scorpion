@@ -20,6 +20,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.BlendModeColorFilter
 import androidx.compose.ui.graphics.Color
@@ -325,6 +326,7 @@ class ScorpionGame(
             ((size.height - padding * 2) * EXPOSE_RATIO).coerceAtLeast(MINIMUM_EXPOSE)
         ) - size
 
+        dealer.drawables.forEach { it.size = Size(size.width.value, size.height.value) }
         // Wrap everything in a column that we can scroll
         Column(
             modifier = Modifier
@@ -404,10 +406,10 @@ class ScorpionGame(
                         if (moveKittyWhenFlipped) {
                             // The kitty cards are moved to the first three columns when flipped
                             // Have w spread the kitty yet?
-                            if (dealer.cards[KITTY_GROUP].cards[0].card!!.spread) {
+                            if (dealer.cards[KITTY_GROUP].cards[0]!!.card.spread) {
                                 // Yes - We flip and move all three cards in the kitty
                                 for (c in dealer.cards[KITTY_GROUP].cards) {
-                                    val group = KITTY_COUNT - 1 - c.card!!.position
+                                    val group = KITTY_COUNT - 1 - c!!.card.position
                                     c.card.changed(generation = generation, group = group, position = dealer.cards[group].cards.size, faceDown = false, spread = true)
                                 }
                             } else if (cheatCardFlip) {
@@ -416,7 +418,7 @@ class ScorpionGame(
                                 card.changed(generation = generation, group = group, position = dealer.cards[group].cards.size, faceDown = false, spread = true)
                                 cheated = true          // Remember that we cheated
                             }
-                        } else if (dealer.cards[KITTY_GROUP].cards[0].card!!.spread) {
+                        } else if (dealer.cards[KITTY_GROUP].cards[0]!!.card.spread) {
                             // The kitty has been spread, so we can flip the card without cheating
                             card.changed(generation = generation, faceDown = false, spread = true)
                         } else if (cheatCardFlip) {
@@ -427,7 +429,7 @@ class ScorpionGame(
                     } else if (card.position == dealer.cards[card.group].cards.lastIndex) {
                         // The card is at the bottom of a column, so we can flip it
                         card.changed(generation = generation, faceDown = false, spread = true)
-                    } else if (cheatCardFlip && dealer.cards[card.group].cards[card.position + 1].card!!.faceUp) {
+                    } else if (cheatCardFlip && dealer.cards[card.group].cards[card.position + 1]!!.card.faceUp) {
                         // We are cheating and the card is the bottom face down card in a column
                         card.changed(generation = generation, faceDown = false, spread = true)
                         cheated = true          // Remember that we cheated
@@ -501,8 +503,8 @@ class ScorpionGame(
             // There is an empty column not look for a king
             for (i in CARDS_PER_SUIT - 1 until CARD_COUNT step CARDS_PER_SUIT) {
                 // Find the king and queen
-                val king = dealer.findCard(i)
-                val queen = dealer.findCard(i - 1)
+                val king = dealer.drawables[i].card
+                val queen = dealer.drawables[i - 1].card
                 // The king needs to be face up
                 // If the king is in the kitty or not in position 0 it could be moved
                 // If the king is in position 0, it can only be move if the king move alone
@@ -517,14 +519,14 @@ class ScorpionGame(
         // See if the kitty has any face down cards
         if (kitty.firstOrNull()?.card?.spread == true) {
             // We have spread the kitty, so lets look for a face down card
-            if (kitty.any { it.card!!.faceDown })
+            if (kitty.any { it!!.card.faceDown })
                 return              // We can flip a card in the kit
         }
 
         // At this point we think the game is over. But if there
         // are cards in the kitty that we haven't spread, then
         // we can spread them and continue play.
-        if (kitty.isEmpty() || kitty.all { it.card!!.spread }) {
+        if (kitty.isEmpty() || kitty.all { it!!.card.spread }) {
             // Did we win? Every colum must either be empty or
             // all of the cards in a suit in descending order
             val won = dealer.cards.all { group ->
@@ -532,11 +534,11 @@ class ScorpionGame(
                 group.cards.isEmpty() || group.cards.let {
                     // Calculate the ace value for the suit of the
                     // first card in the group.
-                    val ace = (group.cards.first().card!!.value / CARDS_PER_SUIT) * CARDS_PER_SUIT
+                    val ace = (group.cards.first()!!.card.value / CARDS_PER_SUIT) * CARDS_PER_SUIT
                     // Now the range of cards in the suit
                     val suit = ace..<ace + CARDS_PER_SUIT
                     // Each card in the column must be in the suit and decreasing in value
-                    group.cards.all { drawable -> drawable.card!!.value in suit && drawable.card.position == CARDS_PER_SUIT - 1 - (drawable.card.value - ace) }
+                    group.cards.all { drawable -> drawable!!.card.value in suit && drawable.card.position == CARDS_PER_SUIT - 1 - (drawable.card.value - ace) }
                 }
             }
 
@@ -556,7 +558,7 @@ class ScorpionGame(
             // We need to spread the cards in the kitty
             for (drawable in kitty) {
                 // If it isn't already spread (from cheating) then change it.
-                if (!drawable.card!!.spread)
+                if (!drawable!!.card.spread)
                     drawable.card.changed(generation = generation, spread = true)
             }
         }
@@ -567,7 +569,7 @@ class ScorpionGame(
         // The dealer makes sure the each card in the deck is in the
         // correct place in the groups, so all we need to do is make
         // sure there are no nulls
-        if (dealer.cards.any { it.cards.any {drawable -> drawable.card == null } })
+        if (dealer.cards.any { it.cards.any {drawable -> drawable == null } })
             return "Nulls present in card groups"
         return null
     }
@@ -644,7 +646,7 @@ class ScorpionGame(
                 // move alone, if it is allowed, and it isn't along in its column, and
                 // it isn't matched with its queen
                 val moveAlone = card.group == KITTY_GROUP || (kingMovesAlone && card.position < dealer.cards[card.group].cards.lastIndex &&
-                    dealer.cards[card.group].cards[card.position + 1].card!!.value != card.value - 1)
+                    dealer.cards[card.group].cards[card.position + 1]!!.card.value != card.value - 1)
                 // If the card isn't at the top of a column, or we can move it alone
                 // Then look for an empty column where it can go.
                 if (card.position != 0 || moveAlone) {
@@ -740,7 +742,7 @@ class ScorpionGame(
                 return          // Moving to same position, do nothing
             // Move all the cards up or down one
             for (i in moveStart .. moveEnd)
-                from[i].card?.let { it.changed(generation = generation, group = toGroup, position = it.position + bump, highlight = Card.HIGHLIGHT_NONE) }
+                from[i]?.card?.let { it.changed(generation = generation, group = toGroup, position = it.position + bump, highlight = Card.HIGHLIGHT_NONE) }
             // Move this card where it belongs
             card.changed(generation = generation, group = toGroup, position = pos, highlight = Card.HIGHLIGHT_NONE)
         } else {
@@ -754,16 +756,16 @@ class ScorpionGame(
             val moveCount = moveEnd - card.position
             // Move the cards below the target to make room for the new cards
             for (i in pos until to.size)
-                to[i].card?.let { it.changed(generation = generation, group = toGroup, position = it.position + moveCount, highlight = Card.HIGHLIGHT_NONE) }
+                to[i]?.card?.let { it.changed(generation = generation, group = toGroup, position = it.position + moveCount, highlight = Card.HIGHLIGHT_NONE) }
             // Move the cards to where they belong
             for (i in card.position until from.size) {
                 // If the cards are before moveEnd, they will move to the new group
                 // Otherwise they move up one. This assumes that we are either moving
                 // all the cards to the bottom of the column, or just one.
                 if (i < moveEnd)
-                    from[i].card?.changed(generation = generation, group = toGroup, position = pos++, highlight = Card.HIGHLIGHT_NONE)
+                    from[i]?.card?.changed(generation = generation, group = toGroup, position = pos++, highlight = Card.HIGHLIGHT_NONE)
                 else
-                    from[i].card?.changed(generation = generation, position = i - 1, highlight = Card.HIGHLIGHT_NONE)
+                    from[i]?.card?.changed(generation = generation, position = i - 1, highlight = Card.HIGHLIGHT_NONE)
             }
         }
     }
@@ -776,7 +778,7 @@ class ScorpionGame(
     private fun findOneLower(cardValue: Int): Card? {
         val value = cardValue % CARDS_PER_SUIT
         return if (value != 0)
-            dealer.findCard(cardValue - 1)
+            dealer.drawables[cardValue - 1].card
         else
             null
     }
@@ -789,7 +791,7 @@ class ScorpionGame(
     private fun findOneHigher(cardValue: Int): Card? {
         val value = cardValue % CARDS_PER_SUIT
         return if (value != CARDS_PER_SUIT - 1)
-            dealer.findCard(cardValue + 1)
+            dealer.drawables[cardValue + 1].card
         else
             null
     }

@@ -19,6 +19,8 @@ interface Dealer {
      * Used by the main activity to start composition
      * */
     val game: Game
+    /** A list of the current drawables for cards in card value order */
+    val drawables: List<CardDrawable>
     /** The list of card groups */
     val cards: List<CardGroup>
     /** The asset path of the back of a card */
@@ -55,13 +57,6 @@ interface Dealer {
      * Show the settings dialog
      */
     suspend fun settings()
-
-    /**
-     * Find a card from the card value
-     * @param cardValue The card value of the card
-     * @return The card
-     */
-    fun findCard(cardValue: Int): Card
 
     /**
      * Run a block of code and update the data base

@@ -24,9 +24,11 @@ import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.compose.ui.draganddrop.DragAndDropTarget
 import androidx.compose.ui.draganddrop.DragAndDropTransferData
 import androidx.compose.ui.draganddrop.toAndroidDragEvent
-import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -83,8 +85,9 @@ interface CardDropTarget {
  * Card groups can be laid out in columns or rows
  */
 class CardGroup {
-    var bounds: RectF = RectF(0.0f, 0.0f, 0.0f, 0.0f)
-    val cards: SnapshotStateList<CardDrawable> = mutableStateListOf()
+    var offset: Offset = Offset(0.0f, 0.0f)
+    var size: Size = Size(0.0f, 0.0f)
+    val cards: SnapshotStateList<CardDrawable?> = mutableStateListOf()
 
     @OptIn(ExperimentalFoundationApi::class)
     fun Modifier.clickGestures(card: Card, game: Game): Modifier {
@@ -179,25 +182,16 @@ class CardGroup {
             modifier = modifier,
             verticalArrangement = verticalArrangement
         ) {
-            // Set the height and width of the card
-            val imageModifier = Modifier.size(size)
             // Add all of the cards to the columns
-            for (drawable in cards) {
-                // Only add the card if it is null or the next card is null or the next card has spread set
-                // Spread means that the next card should offset from this card, so part of this card is visible.
-                // Null values always take up space, though without drawing anything, so if this card is null
-                // or the next card is null we need to add the card. Theoretically, nulls at the end of a group
-                // could be skipped.
-                if (drawable.card == null || drawable.card.position == cards.lastIndex || cards[drawable.card.position + 1].card?.spread != false) {
-                    // Add the card image
-                    GetImage(
-                        drawable,
-                        game,
-                        modifier = imageModifier,
-                        cardPadding = cardPadding,
-                        gestures = gestures
-                    )
-                }
+            for (i in cards.indices) {
+                // Add the card image
+                GetImage(
+                    i,
+                    size,       // TODO: Leave this here until offsets are done
+                    modifier = Modifier,
+                    cardPadding = cardPadding,
+                    gestures = gestures
+                )
             }
         }
     }
@@ -224,25 +218,16 @@ class CardGroup {
                 modifier = modifier,
                 horizontalArrangement = horizontalArrangement
             ) {
-                // Set the height and width of the card
-                val imageModifier = Modifier.size(size)
                 // Add all of the cards to the row
-                for (drawable in cards) {
-                    // Only add the card if it is null or the next card is null or the next card has spread set
-                    // Spread means that the next card should offset from this card, so part of this card is visible.
-                    // Null values always take up space, though without drawing anything, so if this card is null
-                    // or the next card is null we need to add the card. Theoretically, nulls at the end of a group
-                    // could be skipped.
-                    if (drawable.card == null || drawable.card.position == cards.lastIndex || cards[drawable.card.position + 1].card?.spread != false) {
-                        // Add the card image
-                        GetImage(
-                            drawable,
-                            game,
-                            modifier = imageModifier,
-                            cardPadding = cardPadding,
-                            gestures = gestures
-                        )
-                    }
+                for (i in cards.indices) {
+                    // Add the card image
+                    GetImage(
+                        i,
+                        size,       // TODO: Leave this here until offsets are done
+                        modifier = Modifier,
+                        cardPadding = cardPadding,
+                        gestures = gestures
+                    )
                 }
             }
         }
@@ -250,45 +235,39 @@ class CardGroup {
 
     /**
      * Add an image for a card to the group
-     * @param drawable The card to add, or null to add a spacer
-     * @param game The game interface
+     * @param drawable The card drawable to add, or null to add an empty space
      * @param modifier Used to set the width and height of the composable
      * @param cardPadding The padding around the card
+     * @param gestures Callback to add gestures to the image
      */
     @Composable
     private fun GetImage(
-        drawable: CardDrawable,
-        game: Game,
+        i: Int,
+        nullSize: DpSize,
         modifier: Modifier = Modifier,
         cardPadding: PaddingValues = PaddingValues(0.dp),
-        gestures: (@Composable Modifier.(Card) -> Modifier)
+        gestures: @Composable() (Modifier.(Card) -> Modifier)
     ) {
-        val gesture = drawable.card?.let { modifier.gestures(it) }?: modifier
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = gesture.padding(cardPadding)
-        ) {
-            // If card is null, return, the composable modifier will take up space
-            drawable.card?.let {card ->
-                // The filter to apply to the image
-                var filter: ColorFilter? = null
-                // Get the asset path for the image
-                val resourcePath = if (card.faceDown)
-                    game.cardBackAssetPath      // Card back asset path
-                else {
-                    // Get the filter for the highlight
-                    filter = game.getFilter(card.highlight)
-                    // Get the card front asset path
-                    game.cardFrontAssetPath(card.value)
+        val drawable = cards[i]
+        if (drawable?.visible != false) {
+            val gesture = drawable?.let {
+                modifier.size(DpSize(Dp(it.size.width), Dp(it.size.height))).gestures(it.card)
+            } ?: modifier.size(nullSize)
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = gesture.padding(cardPadding)
+            ) {
+                // If card is null, return, the composable modifier will take up space
+                drawable?.let {
+                    // Get the image
+                    AsyncImage(
+                        it.imagePath,
+                        contentDescription = "",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier,
+                        colorFilter = it.colorFilter,
+                    )
                 }
-                // Get the image
-                AsyncImage(
-                    resourcePath,
-                    contentDescription = "",
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier,
-                    colorFilter = filter,
-                )
             }
         }
     }

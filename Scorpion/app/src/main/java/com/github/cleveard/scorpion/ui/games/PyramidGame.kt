@@ -17,6 +17,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draganddrop.DragAndDropEvent
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.BlendModeColorFilter
 import androidx.compose.ui.graphics.Color
@@ -219,6 +220,7 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
             DpSize(pyramidSize.width + size.width + stockPadding, pyramidSize.height)
         val pyramidOffset = DpOffset((maxWidth - fullSize.width) / 2.0f, (maxHeight - fullSize.height) / 2.0f)
 
+        dealer.drawables.forEach { it.size = Size(size.width.value, size.height.value) }
         // The pyramid itself goes at the top-start of the box. The pyramid is formed
         // from rows in a column
         Column(
@@ -377,7 +379,7 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
     private fun Card.processMatches(callback: (Card) -> Boolean): Card? {
         val matchValue = CARDS_PER_SUIT - 2 - value % CARDS_PER_SUIT
         for (i in matchValue..<CARD_COUNT step CARDS_PER_SUIT) {
-            dealer.findCard(i).let {
+            dealer.drawables[i].card.let {
                 if (callback(it))
                     return it
             }
@@ -442,9 +444,9 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
         return notPlayCard.group + 1 == playCard.group &&
             notPlayCard.position.let {pos ->
                 // Either playCard is at position and the card at position + 1 is null
-                (pos == playCard.position && dealer.cards[playCard.group].cards.getOrNull(playCard.position + 1)?.card == null) ||
+                (pos == playCard.position && dealer.cards[playCard.group].cards.getOrNull(playCard.position + 1) == null) ||
                     // or playCard is at position + 1 and the card at position is null
-                    (pos + 1 == playCard.position && dealer.cards[playCard.group].cards[playCard.position - 1].card == null)
+                    (pos + 1 == playCard.position && dealer.cards[playCard.group].cards[playCard.position - 1] == null)
             }
     }
 
@@ -488,7 +490,7 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
             val row = dealer.cards[group]
             // Check whether we have a pair or playable cards that sum to 13
             row.cards.forEach {
-                if (it.card?.playable()?.markSum(sum13, playableCards) == true)
+                if (it?.card?.playable()?.markSum(sum13, playableCards) == true)
                     return      // Sum to 13 game isn't over
             }
         }
@@ -499,16 +501,16 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
                 if (card.group > 0) {
                     val group = dealer.cards[card.group].cards
                     // First check the card covered on the right side
-                    if (card.position < group.lastIndex && group[card.position].card == null) {
+                    if (card.position < group.lastIndex && group[card.position] == null) {
                         // Calculate sum
-                        val sum = dealer.cards[card.group - 1].cards[card.position].card!!.value + card.value
+                        val sum = dealer.cards[card.group - 1].cards[card.position]!!.card.value + card.value
                         if (sum % CARDS_PER_SUIT == CARDS_PER_SUIT - 1)
                             return              // Sum to 13 - game not over
                     }
                     // Next check the card covered on the left side
-                    if (card.position > 0 && group[card.position - 1].card == null) {
+                    if (card.position > 0 && group[card.position - 1] == null) {
                         // Calculate sum
-                        val sum = dealer.cards[card.group - 1].cards[card.position - 1].card!!.value + card.value
+                        val sum = dealer.cards[card.group - 1].cards[card.position - 1]!!.card.value + card.value
                         if (sum % CARDS_PER_SUIT == CARDS_PER_SUIT - 2)
                             return              // Sum to 13 - game not over
                     }
@@ -540,18 +542,18 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
             dealer.onStateChanged(state)
             if (it) {
                 (2..<wasteSize).forEach {i ->
-                    waste.cards[i].card?.let { w -> w.changed(generation = generation, group = STOCK_GROUP, position = wasteSize - 1 - w.position, faceDown = true, spread = false) }
+                    waste.cards[i]?.card?.let { w -> w.changed(generation = generation, group = STOCK_GROUP, position = wasteSize - 1 - w.position, faceDown = true, spread = false) }
                 }
-                waste.cards[1].card?.let { w -> w.changed(generation = generation, group = STOCK_GROUP, position = wasteSize - 1 - w.position, faceDown = false, spread = false) }
+                waste.cards[1]?.card?.let { w -> w.changed(generation = generation, group = STOCK_GROUP, position = wasteSize - 1 - w.position, faceDown = false, spread = false) }
             }
         }
     }
 
     override fun isValid(): String? {
         return when {
-            dealer.cards[STOCK_GROUP].cards.any { it.card == null } -> "Stock has a null card"
-            dealer.cards[WASTE_GROUP].cards.any { it.card == null } -> "Waste has a null card"
-            dealer.cards[DISCARD_GROUP].cards.any { it.card == null } -> "Discard has a null card"
+            dealer.cards[STOCK_GROUP].cards.any { it == null } -> "Stock has a null card"
+            dealer.cards[WASTE_GROUP].cards.any { it == null } -> "Waste has a null card"
+            dealer.cards[DISCARD_GROUP].cards.any { it == null } -> "Discard has a null card"
             else -> null
         }
     }
@@ -560,7 +562,7 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
         card.changed(generation = generation, group = group,
             position = pos, highlight = Card.HIGHLIGHT_NONE, faceDown = false, spread = false)
         if (card.group == STOCK_GROUP && dealer.cards[STOCK_GROUP].cards.size > 1) {
-            dealer.cards[STOCK_GROUP].let { it.cards[it.cards.lastIndex - 1].card?.changed(generation = generation,
+            dealer.cards[STOCK_GROUP].let { it.cards[it.cards.lastIndex - 1]?.card?.changed(generation = generation,
                 highlight = Card.HIGHLIGHT_NONE, faceDown = false, spread = false) }
         }
     }

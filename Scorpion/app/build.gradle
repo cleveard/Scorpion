@@ -35,6 +35,12 @@ android {
         debug {
             applicationIdSuffix ".debug"
             debuggable true
+            minifyEnabled false
+            kotlin {
+                compilerOptions {
+                    freeCompilerArgs = ["-Xdebug"]
+                }
+            }
         }
     }
     compileOptions {
