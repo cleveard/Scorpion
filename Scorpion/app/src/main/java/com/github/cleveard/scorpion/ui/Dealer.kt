@@ -1,6 +1,7 @@
 package com.github.cleveard.scorpion.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.DpSize
 import com.github.cleveard.scorpion.db.Card
 import com.github.cleveard.scorpion.db.StateEntity
 import com.github.cleveard.scorpion.ui.games.Game
@@ -29,6 +30,8 @@ interface Dealer {
     val useSystemTheme: Boolean
     /** The aspect ratio of the card */
     val cardAspect: Float
+    /** The size of the playable area **/
+    var playAreaSize: DpSize
     /**
      * Show dialog
      * Set this to a non null value to show dialog. The content of the dialog
@@ -63,7 +66,7 @@ interface Dealer {
      * @param action The block of code to run. Generation is the new undo generation
      * @return The return value of action
      */
-    suspend fun <T> withUndo(action: suspend (generation: Long) -> T): T
+    suspend fun <T> withUndo(action: (generation: Long) -> T): T
 
     /**
      * Add a card change to the database
@@ -122,6 +125,6 @@ interface Dealer {
      * @param plural An optional integer value to show alert text plurals. Set to null for no plurals
      * @param args Optional arguments used to include in the alert text.
      */
-    suspend fun showNewGameOrDismissAlert(text: Int, title: Int = 0, plural: Int? = null, vararg args: Any)
+    fun showNewGameOrDismissAlert(text: Int, title: Int = 0, plural: Int? = null, vararg args: Any)
 }
 

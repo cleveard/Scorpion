@@ -43,6 +43,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.AndroidViewModel
@@ -125,6 +126,12 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
     /** @inheritDoc */
     override val cardAspect: Float
         get() = MainActivityViewModel.cardAspect
+    private val _playAreaSize: MutableState<DpSize> = mutableStateOf(DpSize.Zero)
+    /** @inheritDoc */
+    override var playAreaSize: DpSize
+        get() = _playAreaSize.value
+        set(value) { _playAreaSize.value = value}
+
     /** Mutable state for the current game generation */
     private var generation: MutableState<Long> = mutableLongStateOf(0L)
     /** Mutable state for the smallest valid game generation */
@@ -170,9 +177,12 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
             val list = game.deal(this)
             var success = false
             try {
+                // Update the cards in the current card list
+                updateCards(list)
+                // Update group and card positions and sizes
+                game.setupGroups()
+                game.cardsUpdated()
                 CardDatabase.db.withTransaction {
-                    // Update the cards in the current card list
-                    updateCards(list)
                     // Add the cards as the first generation
                     CardDatabase.db.newGeneration(game.name, list, 0L)
                     // Clear any highlights
@@ -477,7 +487,12 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
         }
     }
 
-    private suspend fun inconsistentDatabase(error: String) {
+    /**
+     * Report an inconsistentDatabase error
+     * and throw and exception
+     * @param error A string describing the error.
+     */
+    private fun inconsistentDatabase(error: String) {
         // Show an alert and to start a new game
         showNewGameOrDismissAlert(R.string.database_inconsistency, R.string.error)
         throw DatabaseInconsistency(error)
@@ -505,7 +520,7 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
             pair.second.forEach {
                 list[it.card] = list[it.card].copy(highlight = it.highlight)
             }
-            for (i in 0 until drawables.size) {
+            for (i in drawables.indices) {
                 // Compare the cards from each table, ignoring highlight
                 val c = this.drawables[i].card
                 val d = pair.first[i]
@@ -543,9 +558,10 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
     }
 
     /** @inheritDoc */
-    override suspend fun <T> withUndo(action: suspend (generation: Long) -> T): T {
+    override suspend fun <T> withUndo(action: (generation: Long) -> T): T {
         // Success is set to true, if the action completes
         var success = false
+        val oldState = game.state.state
         // Get the current highlights, if we aren't nesting
         if (undoNesting == 0) {
             previousHighlight.addAll(highlightCards.values)
@@ -556,27 +572,38 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
             // Execute the action
             val result = action(generation.value + 1)
             try {
-            // Check for card flips, to clear undo if we don't allow undo of card flips
-            // Where there any changes, other than highlights
-            // The game can change cards while checking for game over
-            // So we loop and let the game check until it doesn't change anything
-            while (changedCards.isNotEmpty()) {
-                // Keep previous values of cards
-                previousCards.putAll(changedCards.keys.map {
-                    it to (previousCards[it] ?: drawables[it].card)
-                })
-                // Update the cards in list with the changes
-                updateCards(changedCards.values)
-                // Keep track of all changes
-                newCards.putAll(changedCards)
-                // Clear the changed cards
-                changedCards.clear()
-                // Let the game check for game over. This may change more cards
-                game.checkGameOver(generation.value + 1)
-            }
+                // Check for card flips, to clear undo if we don't allow undo of card flips
+                // Where there any changes, other than highlights
+                // The game can change cards while checking for game over
+                // So we loop and let the game check until it doesn't change anything
+                while (changedCards.isNotEmpty()) {
+                    // Keep previous values of cards
+                    previousCards.putAll(changedCards.keys.map {
+                        it to (previousCards[it] ?: drawables[it].card)
+                    })
+                    // Update the cards in list with the changes
+                    updateCards(changedCards.values)
+                    // Keep track of all changes
+                    newCards.putAll(changedCards)
+                    // Clear the changed cards
+                    changedCards.clear()
+                    // Let the game check for game over. This may change more cards
+                    game.checkGameOver(generation.value + 1)
+                }
 
-            // Is this the last nesting level
-            if (undoNesting == 1) {
+                // Is this the last nesting level
+                if (undoNesting == 1) {
+                    // Update highlights in the cards
+                    mutableMapOf<Int, Card>().apply {
+                        // Build a change list with the card highlight clear and set
+                        putAll(previousHighlight.map { it.card to drawables[it.card].card.copy(highlight = Card.HIGHLIGHT_NONE) })
+                        putAll(highlightCards.values.map { it.card to drawables[it.card].card.copy(highlight = it.highlight) })
+                        // Update the cards
+                        updateCards(values)
+                    }
+                    // Update card positions
+                    game.cardsUpdated()
+
                     // Make the full database update a single transaction
                     CardDatabase.db.withTransaction {
                         // Check for card flips, to clear undo if we don't allow undo of card flips
@@ -603,13 +630,10 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
                         CardDatabase.db.getHighlightDao().delete(previousHighlight.map { it.card })
                         // Add the new highlights
                         CardDatabase.db.getHighlightDao().insert(highlightCards.values)
-                        mutableMapOf<Int, Card>().apply {
-                            // Build a change list with the card highlight clear and set
-                            putAll(previousHighlight.map { it.card to drawables[it.card].card.copy(highlight = Card.HIGHLIGHT_NONE) })
-                            putAll(highlightCards.values.map { it.card to drawables[it.card].card.copy(highlight = it.highlight) })
-                            // Update the cards
-                            updateCards(values)
-                        }
+
+                        // Update game state if it was changed.
+                        if (!game.state.state.contentEquals(oldState))
+                            CardDatabase.db.getStateDao().update(game.state.game, game.state.state)
 
                         loadAndCheck()
                         success = true
@@ -698,7 +722,7 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
             null
 
     /** @inheritDoc */
-    override suspend fun showNewGameOrDismissAlert(text: Int, title:Int, plural: Int?, vararg args: Any) {
+    override fun showNewGameOrDismissAlert(text: Int, title:Int, plural: Int?, vararg args: Any) {
         // Launch a coroutine to show the dialog. We don't want this coroutine to wait for the result
         viewModelScope.launch {
             // Show the alert
@@ -722,15 +746,16 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
      * @param changed The cards that changed
      * The cards are updated to drawables and cardGroups
      */
-    private suspend fun updateCards(changed: Collection<Card>) {
+    private fun updateCards(changed: Collection<Card>) {
         // Put a card or null into a card group
         // Position is passed separately, because card may be null.
-        fun CardGroup.setCard(position: Int, drawable: CardDrawable?, next: CardDrawable?) {
+        fun CardGroup.setCard(position: Int, offsetPos: Int, drawable: CardDrawable?, next: CardDrawable?) {
             val visible = drawable == null || next == null || next.card.group != drawable.card.group ||
                 next.card.position > drawable.card.position + 1 || next.card.spread
             drawable?.let {
                 // Rely on mutable state object to check for changes
                 it.visible = visible
+                it.offsetPos = offsetPos
                 // Get the asset path for the image
                 it.imagePath = if (it.card.faceDown) {
                     // We don't filter card backs
@@ -773,40 +798,61 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
         val sorted = drawables.sortedWith(compareBy({ it.card.group }, { it.card.position }))
         val iterator = sorted.iterator()
         var drawable: CardDrawable?
+        // Get the first drawable
         drawable = iterator.next()
+        // Clear any card groups before the first group with a card
         for (i in 0..<drawable.card.group)
             cardGroups[i].cards.clear()
         var to: CardGroup = cardGroups[drawable.card.group]
+        // Clear any cards before the first card
         for (i in 0..<drawable.card.position)
-            to.setCard(i, null, if (i == drawable.card.position - 1) drawable else null)
+            to.setCard(i, i, null, if (i == drawable.card.position - 1) drawable else null)
+        // Set the offset position to the position of the first card in the group
+        var offsetPos = drawable.card.position
 
+        // Continue until we have finished with all the cards
         while (drawable != null) {
+            // Get the next card or null, at the end of the list
             val next = if (iterator.hasNext()) iterator.next() else null
-            to.setCard(drawable.card.position, drawable, next)
+            // Set the current card in the card groups
+            to.setCard(drawable.card.position, offsetPos, drawable, next)
+            // If the card is visible, bump the offset position
+            if (drawable.visible)
+                ++offsetPos
+            // If we are at the end of the cards or the end of a group
             if (next == null || next.card.group != drawable.card.group) {
+                // Remove cards after this card and before the next group
                 removeTails(drawable.card.group, drawable.card.position + 1, next?.card?.group ?: cardGroups.size)
                 if (next != null) {
+                    // Set the next group
                     to = cardGroups[next.card.group]
+                    // Clear cards before the first card in the group
                     for (i in 0..<next.card.position)
-                        to.setCard(i, null, if (i == next.card.position - 1) next else null)
+                        to.setCard(i, i, null, if (i == next.card.position - 1) next else null)
+                    // Set the offset position to the first card position
+                    offsetPos = next.card.position
                 }
             } else {
+                // Clear and spaces between cards, while bumping the offset position
                 for (i in drawable.card.position + 1..<next.card.position)
-                    to.setCard(i, null, next)
+                    to.setCard(i, offsetPos++, null, next)
             }
+            // Go to the next card
             drawable = next
         }
 
         // Validity check. Can't use !== because the SnapshotStateList
         // checks for changes using ==
-        drawables.firstOrNull { cardGroups.getOrNull(it.card.group)?.cards?.getOrNull(it.card.position) !== it }?.let {
+        // Make sure each drawable is in the proper position in the group
+        drawables.firstOrNull { cardGroups.getOrNull(it.card.group)?.cards?.getOrNull(it.card.position) !== it }?.let {d ->
             drawables.sortedWith(compareBy({ it.card.group }, { it.card.position })).forEach {
                 val other = cardGroups.getOrNull(it.card.group)?.cards?.getOrNull(it.card.position)
                 if (other !== it)
                     Log.d("DATABASE", "$it.card}\n!== $other}")
             }
-            inconsistentDatabase("Card deck and groups are out of sync - $it")
+            inconsistentDatabase("Card deck and groups are out of sync - $d")
         }
+        // Make sure each drawble in the groups has the correct group and position
         cardGroups.indices.forEach {group ->
             val cards = cardGroups[group].cards
             cards.indices.forEach {position ->
@@ -816,6 +862,7 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
                 }
             }
         }
+        // Let the game make its own checks
         game.isValid().also {
             if (it != null)
                 inconsistentDatabase(it)
@@ -826,11 +873,13 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
      * Update the game
      * @param list The list of cards to update
      */
-    private suspend fun updateGame(list: List<Card>) {
+    private fun updateGame(list: List<Card>) {
         // Clear the highlights
         updateCards(highlightCards.values.map { drawables[it.card].card.copy(highlight = Card.HIGHLIGHT_NONE) })
         // Update the cards in the card list
         updateCards(list)
+        // Update card positions
+        game.cardsUpdated()
     }
 
     /**
@@ -852,6 +901,9 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
                                 highlightCards.clear()
                                 // Set the highlights from the database
                                 updateCards(pair.second.map { drawables[it.card].card.copy(highlight = it.highlight) })
+                                // Update group and card positions
+                                game.setupGroups()
+                                game.cardsUpdated()
                                 // Add the highlights to the highlight list
                                 highlightCards.putAll(pair.second.map { it.card to it })
                                 // Set the current, min and max generations

@@ -1,23 +1,14 @@
 package com.github.cleveard.scorpion.ui.games
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.BoxWithConstraintsScope
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draganddrop.DragAndDropEvent
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.BlendModeColorFilter
 import androidx.compose.ui.graphics.Color
@@ -49,6 +40,7 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
     private var clearPyramidOnly: Boolean = state.bundle.getBoolean(CLEAR_PYRAMID_ONLY, true)
     private var playPartialCover: Boolean = state.bundle.getBoolean(PLAY_PARTIAL_COVER, true)
     private var showHighlights: MutableState<Boolean> = mutableStateOf(state.bundle.getBoolean(SHOW_HIGHLIGHTS, true))
+    private var cardSize: DpSize = DpSize.Zero
 
     /** Dialog content for the variant dialog */
     private val variantContent = object: DialogContent {
@@ -197,136 +189,96 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
         return list
     }
 
-    @Composable
-    override fun BoxWithConstraintsScope.Content(modifier: Modifier) {
+    override fun setupGroups() {
         // Calculate the card aspect ratio
         val aspect = dealer.cardAspect
         // The width of cards + padding for portrait layout
-        val widthPortrait = ((maxWidth / ROW_COUNT) - cardPadding * 2)
-            .coerceAtMost((maxHeight - cardPadding * 4 - stockPadding) * aspect / ((ROW_COUNT + 3) * 0.5f))
+        val widthPortrait = ((dealer.playAreaSize.width / ROW_COUNT) - cardPadding * 2)
+            .coerceAtMost((dealer.playAreaSize.height - cardPadding * 4 - stockPadding) * aspect / ((ROW_COUNT + 3) * 0.5f))
         // The width of cards + padding for landscape layout
-        val widthLandscape = (((maxWidth - stockPadding) / (ROW_COUNT + 1)) - cardPadding * 2)
-            .coerceAtMost((maxHeight - cardPadding * 2) * aspect / ((ROW_COUNT + 1) * 0.5f))
+        val widthLandscape = (((dealer.playAreaSize.width - stockPadding) / (ROW_COUNT + 1)) - cardPadding * 2)
+            .coerceAtMost((dealer.playAreaSize.height - cardPadding * 2) * aspect / ((ROW_COUNT + 1) * 0.5f))
         // Choose the layout with the largest width
         val portrait = widthPortrait > widthLandscape
         // Calculate the scale required for the cards
         val width = widthLandscape.coerceAtLeast(widthPortrait)
 
-        val size = DpSize(width + cardPadding * 2, width / aspect + cardPadding * 2)
-        val pyramidSize = DpSize(size.width * ROW_COUNT, (size.height - cardPadding * 2) * 0.5f * (ROW_COUNT - 1) + size.height)
+        // Set the card size
+        cardSize = DpSize(width + cardPadding * 2, width / aspect + cardPadding * 2)
+        // Calculate the size of the pyramid without the stock, waste and discard groups
+        val pyramidSize = DpSize(cardSize.width * ROW_COUNT, (cardSize.height - cardPadding * 2) * 0.5f * (ROW_COUNT - 1) + cardSize.height)
+        // Calculate the full size of the cards in the playable area. Portrait layout puts the stock,
+        // waste and discard piles under the pyramid. Landscape puts them to the right of the pyramid
         val fullSize = if (portrait)
-            DpSize(pyramidSize.width, pyramidSize.height + size.height + stockPadding)
+            DpSize(pyramidSize.width, pyramidSize.height + cardSize.height + stockPadding)
         else
-            DpSize(pyramidSize.width + size.width + stockPadding, pyramidSize.height)
-        val pyramidOffset = DpOffset((maxWidth - fullSize.width) / 2.0f, (maxHeight - fullSize.height) / 2.0f)
+            DpSize(pyramidSize.width + cardSize.width + stockPadding, pyramidSize.height)
+        // The offset of the pyramid to center it in the playable area.
+        val pyramidOffset = DpOffset((dealer.playAreaSize.width - fullSize.width) / 2.0f, (dealer.playAreaSize.height - fullSize.height) / 2.0f)
 
-        dealer.drawables.forEach { it.size = Size(size.width.value, size.height.value) }
-        // The pyramid itself goes at the top-start of the box. The pyramid is formed
-        // from rows in a column
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.offset(pyramidOffset.x, pyramidOffset.y)
-                .size(pyramidSize),
-            verticalArrangement = Arrangement.spacedBy((-cardPadding - size.height * 0.5f), Alignment.Top)
-        ) {
-            for (i in 0..<ROW_COUNT) {
-                dealer.cards[i].RowContent(
-                    dealer.game,
-                    size = size,
-                    modifier = Modifier.size(size.width * (i + 1), size.height),
-                    cardPadding = PaddingValues(cardPadding),
-                    gestures = {
-                        dragSourceCard(it).dragTargetCard(it).clickableCard(it)
-                    }
-                )
-            }
+        // Calculate the offsets for each row in the pyramid
+        for (i in 0..<ROW_COUNT) {
+            val group = dealer.cards[i]
+            // Center each row horizontally and space by half a card vertically
+            group.offset = pyramidOffset + DpOffset(
+                (pyramidSize.width - cardSize.width * (i + 1)) / 2,
+                (cardSize.height * 0.5f - cardPadding) * i
+            )
+            // Set the group spacing to be a row
+            group.spacing = DpSize(cardSize.width, 0.dp)
         }
 
         if (portrait) {
             // The stock and waste are put below the pyramid on the left
             // and the discard is below the pyramid on the right
             val offsetY = pyramidOffset.y + pyramidSize.height + stockPadding
-            Row(
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.offset(x = pyramidOffset.x, y = offsetY)
-                    .width(size.width * 2.0f + stockPadding)
-            ) {
-                dealer.cards[STOCK_GROUP].RowContent(
-                    dealer.game,
-                    size = size,
-                    modifier = Modifier
-                        .size(size.width, size.height),
-                    cardPadding = PaddingValues(cardPadding),
-                    gestures = {
-                        dragSourceCard(it).dragTargetCard(it).clickableCard(it)
-                    }
-                )
-
-                dealer.cards[WASTE_GROUP].RowContent(
-                    dealer.game,
-                    size = size,
-                    modifier = Modifier
-                        .size(size.width, size.height),
-                    cardPadding = PaddingValues(cardPadding),
-                    gestures = {
-                        dragSourceCard(it).dragTargetCard(it).clickableCard(it)
-                    }
-                )
+            dealer.cards[STOCK_GROUP].let {
+                it.offset = DpOffset(pyramidOffset.x, offsetY)
+                // Spacing is 0 to make the group a stack
+                it.spacing = DpSize.Zero
             }
-
-            dealer.cards[DISCARD_GROUP].RowContent(
-                dealer.game,
-                size = size,
-                modifier = Modifier
-                    .offset(pyramidOffset.x + fullSize.width - size.width, offsetY)
-                    .size(size.width, size.height),
-                cardPadding = PaddingValues(cardPadding),
-                gestures = {
-                    dragTargetCard(it)
-                }
-            )
+            dealer.cards[WASTE_GROUP].let {
+                it.offset = DpOffset(pyramidOffset.x + cardSize.width + stockPadding, offsetY)
+                // Spacing is 0 to make the group a stack
+                it.spacing = DpSize.Zero
+            }
+            dealer.cards[DISCARD_GROUP].let {
+                it.offset = DpOffset(pyramidOffset.x + fullSize.width - cardSize.width, offsetY)
+                // Spacing is 0 to make the group a stack
+                it.spacing = DpSize.Zero
+            }
         } else {
             // The stock and waste are put below the pyramid on the top-end
             // and the discard is at the bottom-end
             val endOffsetX = pyramidOffset.x + fullSize.width
-            val stockWidth = size.width * 2.0f + stockPadding
-            Row(
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.offset(x = endOffsetX - stockWidth, y = pyramidOffset.y)
-                    .width(stockWidth)
-            ) {
-                dealer.cards[STOCK_GROUP].RowContent(
-                    dealer.game,
-                    size = size,
-                    modifier = Modifier
-                        .size(size.width, size.height),
-                    cardPadding = PaddingValues(cardPadding),
-                    gestures = {
-                        dragSourceCard(it).dragTargetCard(it).clickableCard(it)
-                    }
-                )
-
-                dealer.cards[WASTE_GROUP].RowContent(
-                    dealer.game,
-                    size = size,
-                    modifier = Modifier
-                        .size(size.width, size.height),
-                    cardPadding = PaddingValues(cardPadding),
-                    gestures = {
-                        dragSourceCard(it).dragTargetCard(it).clickableCard(it)
-                    }
-                )
+            val stockWidth = cardSize.width * 2.0f + stockPadding
+            dealer.cards[STOCK_GROUP].let {
+                it.offset = DpOffset(x = endOffsetX - stockWidth, y = pyramidOffset.y)
+                // Spacing is 0 to make the group a stack
+                it.spacing = DpSize.Zero
             }
+            dealer.cards[WASTE_GROUP].let {
+                it.offset = DpOffset(x = endOffsetX - cardSize.width, y = pyramidOffset.y)
+                // Spacing is 0 to make the group a stack
+                it.spacing = DpSize.Zero
+            }
+            dealer.cards[DISCARD_GROUP].let {
+                it.offset = DpOffset(pyramidOffset.x + pyramidSize.width + stockPadding, pyramidOffset.y + pyramidSize.height - cardSize.height)
+                // Spacing is 0 to make the group a stack
+                it.spacing = DpSize.Zero
+            }
+        }
+    }
 
-            dealer.cards[DISCARD_GROUP].RowContent(
+    @Composable
+    override fun Content(modifier: Modifier) {
+        // Draw each group where it belongs
+        for (i in 0..<GROUP_COUNT) {
+            dealer.cards[i].Content(
                 dealer.game,
-                size = size,
-                modifier = Modifier
-                    .offset(pyramidOffset.x + pyramidSize.width + stockPadding, pyramidOffset.y + pyramidSize.height - size.height)
-                    .size(size.width, size.height),
-                    cardPadding = PaddingValues(cardPadding),
+                cardPadding = PaddingValues(cardPadding),
                 gestures = {
-                    dragTargetCard(it)
+                    dragSourceCard(it).dragTargetCard(it).clickableCard(it)
                 }
             )
         }
@@ -532,14 +484,14 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
         }
     }
 
-    private suspend fun wasteToStock(generation: Long): Boolean {
+    private fun wasteToStock(generation: Long): Boolean {
         val waste = dealer.cards[WASTE_GROUP]
         val wasteSize = waste.cards.size
         // Should we take the cards from the waste and try some more
         return(wasteSize > 1 && dealer.cards[STOCK_GROUP].cards.isEmpty() && stockPasses + 1 < stockPassCount).also {
             ++stockPasses
             state.bundle.putInt(STOCK_PASSES, stockPasses)
-            dealer.onStateChanged(state)
+            state.onBundleUpdated()
             if (it) {
                 (2..<wasteSize).forEach {i ->
                     waste.cards[i]?.card?.let { w -> w.changed(generation = generation, group = STOCK_GROUP, position = wasteSize - 1 - w.position, faceDown = true, spread = false) }
@@ -565,6 +517,12 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
             dealer.cards[STOCK_GROUP].let { it.cards[it.cards.lastIndex - 1]?.card?.changed(generation = generation,
                 highlight = Card.HIGHLIGHT_NONE, faceDown = false, spread = false) }
         }
+    }
+
+    /**  @inheritDoc*/
+    override fun cardsUpdated() {
+        for (group in dealer.cards)
+            group.cardsUpdated(cardSize)
     }
 
     override fun onClick(card: Card) {

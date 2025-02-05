@@ -35,6 +35,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.max
 import com.github.cleveard.scorpion.db.CardDatabase
@@ -92,6 +93,30 @@ fun ScorpionPreview(dealer: Dealer? = null) {
             }
 
             // The toolbar placement depends on the orientation
+            val newArea = if (landscape)
+                DpSize(maxWidth - BAR_HEIGHT, maxHeight)
+            else
+                DpSize(maxWidth, maxHeight - BAR_HEIGHT)
+
+            dealer?.let {
+                // Recalculate the group and card positions if the playable area size changes
+                if (it.playAreaSize.width != newArea.width || it.playAreaSize.height != newArea.height) {
+                    it.playAreaSize = newArea
+                    it.game.setupGroups()
+                    it.game.cardsUpdated()
+                }
+
+                // Let the game fill the rest of the screen area
+                Box(
+                    Modifier.size(it.playAreaSize)
+                ) {
+                    it.game.Content(
+                        Modifier.align(Alignment.TopStart)
+                            .size(it.playAreaSize)
+                    )
+                }
+            }
+
             if (landscape) {
                 // In landscape mode the toolbar is a column on the end side
                 Column(
@@ -104,21 +129,6 @@ fun ScorpionPreview(dealer: Dealer? = null) {
                     // Put tools into the toolbar
                     ToolContent(true, dealer)
                 }
-
-                dealer?.game?.let {
-                    // Let the game fill the rest of the screen area
-                    with(it) {
-                        BoxWithConstraints(
-                            Modifier.size(maxWidth - BAR_HEIGHT, maxHeight)
-                        ) {
-                            Content(
-                                Modifier.align(Alignment.TopStart)
-                                    .fillMaxHeight()
-                                    .width(maxWidth - BAR_HEIGHT)
-                            )
-                        }
-                    }
-                }
             } else {
                 // In portrait mode the tool bar is a row along the bottom of the screen
                 Row(
@@ -130,22 +140,6 @@ fun ScorpionPreview(dealer: Dealer? = null) {
                 ) {
                     // Put tools into the tool bar
                     ToolContent(false, dealer)
-                }
-
-                dealer?.game?.let {
-                    // Let the game fill the rest of the screen area
-                    with(it) {
-                        BoxWithConstraints(
-                            Modifier.size(maxWidth, maxHeight - BAR_HEIGHT)
-                        ) {
-                            // Let the game fill the rest of the screen area
-                            Content(
-                                Modifier.align(Alignment.TopStart)
-                                    .height(maxHeight - BAR_HEIGHT)
-                                    .fillMaxWidth()
-                            )
-                        }
-                    }
                 }
             }
         }

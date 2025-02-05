@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.BoxWithConstraintsScope
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.unit.DpSize
 import com.github.cleveard.scorpion.db.Card
 import com.github.cleveard.scorpion.db.StateEntity
 import com.github.cleveard.scorpion.ui.Actions
@@ -40,7 +41,12 @@ sealed class Game(
      * @param modifier The modifier for the composable
      */
     @Composable
-    abstract fun BoxWithConstraintsScope.Content(modifier: Modifier)
+    abstract fun Content(modifier: Modifier)
+
+    /**
+     * Setup the group offsets and sizes
+     */
+    abstract fun setupGroups()
 
     /**
      * Game content for the variant dialog
@@ -77,6 +83,12 @@ sealed class Game(
      * @return Error string if something is wrong, or null if all is OK
      */
     abstract fun isValid(): String?
+
+    /**
+     * Inform the game that cards have change so it can update
+     * the drawable offsets and sizes
+     */
+    abstract fun cardsUpdated()
 
     companion object {
         const val CARDS_PER_SUIT: Int = 13

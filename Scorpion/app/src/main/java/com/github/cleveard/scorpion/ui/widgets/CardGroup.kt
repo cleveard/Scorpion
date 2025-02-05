@@ -1,22 +1,20 @@
 package com.github.cleveard.scorpion.ui.widgets
 
 import android.content.ClipData
-import android.graphics.RectF
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.draganddrop.dragAndDropSource
 import androidx.compose.foundation.draganddrop.dragAndDropTarget
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,13 +22,10 @@ import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.compose.ui.draganddrop.DragAndDropTarget
 import androidx.compose.ui.draganddrop.DragAndDropTransferData
 import androidx.compose.ui.draganddrop.toAndroidDragEvent
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.DpSize
-import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.github.cleveard.scorpion.db.Card
@@ -85,9 +80,41 @@ interface CardDropTarget {
  * Card groups can be laid out in columns or rows
  */
 class CardGroup {
-    var offset: Offset = Offset(0.0f, 0.0f)
-    var size: Size = Size(0.0f, 0.0f)
+    private val _offset: MutableState<DpOffset> = mutableStateOf(DpOffset.Zero)
+    /** The size of the group */
+    var size: DpSize = DpSize.Zero
+    /** The spacing of cards in the group */
+    var spacing: DpSize = DpSize.Zero
+    /** The drawbles of cards in the group */
     val cards: SnapshotStateList<CardDrawable?> = mutableStateListOf()
+
+    /** The offset of the group in the playable area */
+    var offset: DpOffset
+        get() = _offset.value
+        set(value) { _offset.value = value }
+
+    /**
+     * Recalculate the card offsets for the group
+     * @param cardSize The size of each card
+     */
+    fun cardsUpdated(cardSize: DpSize) {
+        // Set the group size
+        size = if (cards.isEmpty())
+            cardSize
+        else {
+            // Set the card offset
+            for (card in cards) {
+                card?.let { drawable ->
+                    // Make sure the size is correct
+                    drawable.size = cardSize
+                    // The offset is just the spacing time the offset position
+                    drawable.offset = DpOffset(spacing.width * drawable.offsetPos, spacing.height * drawable.offsetPos)
+                }
+            }
+            // The size of the group
+            spacing * cards.last()!!.offsetPos + cardSize
+        }
+    }
 
     @OptIn(ExperimentalFoundationApi::class)
     fun Modifier.clickGestures(card: Card, game: Game): Modifier {
@@ -165,77 +192,32 @@ class CardGroup {
     }
 
     /**
-     * Card group laid out in a column
+     * Card group laid out
      */
     @Composable
-    fun ColumnContent(
+    fun Content(
         game: Game,
-        size: DpSize,
         modifier: Modifier = Modifier,
         cardPadding: PaddingValues = PaddingValues(0.dp),
-        verticalArrangement: Arrangement.Vertical = Arrangement.Top,
-        gestures: (@Composable Modifier.(Card) -> Modifier) = {
+        gestures: @Composable (Modifier.(Card) -> Modifier) = {
             clickGestures(it, game)
         }
     ) {
-        Column(
-            modifier = modifier,
-            verticalArrangement = verticalArrangement
-        ) {
-            // Add all of the cards to the columns
-            for (i in cards.indices) {
-                // Add the card image
-                GetImage(
-                    i,
-                    size,       // TODO: Leave this here until offsets are done
-                    modifier = Modifier,
-                    cardPadding = cardPadding,
-                    gestures = gestures
-                )
-            }
-        }
-    }
-
-    /**
-     * Card group laid out in a row
-     */
-    @Composable
-    fun RowContent(
-        game: Game,
-        size: DpSize,
-        modifier: Modifier = Modifier,
-        cardPadding: PaddingValues = PaddingValues(0.dp),
-        horizontalArrangement: Arrangement.Horizontal = Arrangement.Start,
-        gestures: (@Composable Modifier.(Card) -> Modifier) = {
-            clickGestures(it, game)
-        }
-    ) {
-        // Always layout the cards left-to-right, because the card value is always on the
-        // left side of the card. If the cards overlap, we want the card on top to be offset
-        // to the right.
-        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-            Row(
+        // Add all of the cards to the row
+        for (i in cards.indices) {
+            // Add the card image
+            GetImage(
+                i,
                 modifier = modifier,
-                horizontalArrangement = horizontalArrangement
-            ) {
-                // Add all of the cards to the row
-                for (i in cards.indices) {
-                    // Add the card image
-                    GetImage(
-                        i,
-                        size,       // TODO: Leave this here until offsets are done
-                        modifier = Modifier,
-                        cardPadding = cardPadding,
-                        gestures = gestures
-                    )
-                }
-            }
+                cardPadding = cardPadding,
+                gestures = gestures
+            )
         }
     }
 
     /**
      * Add an image for a card to the group
-     * @param drawable The card drawable to add, or null to add an empty space
+     * @param i The index of the drawable
      * @param modifier Used to set the width and height of the composable
      * @param cardPadding The padding around the card
      * @param gestures Callback to add gestures to the image
@@ -243,29 +225,37 @@ class CardGroup {
     @Composable
     private fun GetImage(
         i: Int,
-        nullSize: DpSize,
         modifier: Modifier = Modifier,
         cardPadding: PaddingValues = PaddingValues(0.dp),
-        gestures: @Composable() (Modifier.(Card) -> Modifier)
+        gestures: @Composable (Modifier.(Card) -> Modifier)
     ) {
-        val drawable = cards[i]
-        if (drawable?.visible != false) {
-            val gesture = drawable?.let {
-                modifier.size(DpSize(Dp(it.size.width), Dp(it.size.height))).gestures(it.card)
-            } ?: modifier.size(nullSize)
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = gesture.padding(cardPadding)
-            ) {
-                // If card is null, return, the composable modifier will take up space
-                drawable?.let {
+        // Don't need to do anything for null drawables. Their
+        // spacing is already reflected in the drawable offsets
+        cards[i]?.let { drawable ->
+            // Skip drawables that are not visible
+            if (drawable.visible != false) {
+                // A box to hold the image
+                Box(
+                    // Align image in center of box
+                    contentAlignment = Alignment.Center,
+                    // Set the box offset
+                    modifier = modifier.offset {
+                        IntOffset((offset.x + drawable.offset.x).roundToPx(), (offset.y + drawable.offset.y).roundToPx())
+                    }
+                        // Set box size
+                        .size(drawable.size)
+                        // Add any gestures
+                        .gestures(drawable.card)
+                        // Set the card padding
+                        .padding(cardPadding)
+                ) {
                     // Get the image
                     AsyncImage(
-                        it.imagePath,
+                        drawable.imagePath,
                         contentDescription = "",
                         contentScale = ContentScale.Fit,
                         modifier = Modifier,
-                        colorFilter = it.colorFilter,
+                        colorFilter = drawable.colorFilter,
                     )
                 }
             }

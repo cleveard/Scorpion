@@ -1,34 +1,33 @@
 package com.github.cleveard.scorpion.ui.games
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.BoxWithConstraintsScope
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.rememberScrollableState
+import androidx.compose.foundation.gestures.scrollable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.BlendModeColorFilter
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.coerceAtLeast
+import androidx.compose.ui.unit.coerceAtMost
 import androidx.compose.ui.unit.dp
 import com.github.cleveard.scorpion.R
 import com.github.cleveard.scorpion.db.Card
@@ -110,6 +109,9 @@ class ScorpionGame(
     private var hiddenCardColumnCount: Int = state.bundle.getInt(HIDDEN_CARD_COLUMN_COUNT, 3)
     /** Flag to move the alone to empty columns */
     private var kingMovesAlone: Boolean = state.bundle.getBoolean(KING_MOVES_ALONE, true)
+    private var cardSize: DpSize = DpSize.Zero
+    private val fullSize: MutableState<DpSize> = mutableStateOf(DpSize.Zero)
+    private val scrollOffset: MutableState<Dp> = mutableStateOf(0.dp)
 
     /** Dialog content for the variant dialog */
     private val variantContent = object: DialogContent {
@@ -308,64 +310,98 @@ class ScorpionGame(
         return list
     }
 
-    /** @inheritDoc */
-    @Composable
-    override fun BoxWithConstraintsScope.Content(modifier: Modifier) {
+    override fun setupGroups() {
         // TODO: Need to set maximum sizes for larger screens
         // Portrait makes two rows, one for the kitty and one for the columns
         // Landscape puts the columns and kitty in one row
-        val twoRows = maxHeight > maxWidth
+        val twoRows = dealer.playAreaSize.height > dealer.playAreaSize.width
         // The number of columns across the playing surface
         val cols = if (twoRows) GROUP_COUNT - 1 else GROUP_COUNT
         // The width of each column
-        val colWidth = maxWidth / cols
+        val colWidth = dealer.playAreaSize.width / cols
         // The size of the card with padding
-        val size = DpSize(colWidth, (colWidth - padding * 2) / dealer.cardAspect + padding * 2)
+        cardSize = DpSize(colWidth, (colWidth - padding * 2) / dealer.cardAspect + padding * 2)
+        // Calculate the vertical and horizontal spacing for cards
         val spacing = DpSize(
-            ((size.width - padding * 2) * EXPOSE_RATIO).coerceAtLeast(MINIMUM_EXPOSE),
-            ((size.height - padding * 2) * EXPOSE_RATIO).coerceAtLeast(MINIMUM_EXPOSE)
-        ) - size
+            ((cardSize.width - padding * 2) * EXPOSE_RATIO).coerceAtLeast(MINIMUM_EXPOSE),
+            ((cardSize.height - padding * 2) * EXPOSE_RATIO).coerceAtLeast(MINIMUM_EXPOSE)
+        )
+        // Set the initial full size of the cards
+        fullSize.value = DpSize(dealer.playAreaSize.width, cardSize.height)
 
-        dealer.drawables.forEach { it.size = Size(size.width.value, size.height.value) }
-        // Wrap everything in a column that we can scroll
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-        ) {
-            // Put the kitty in a separate row if needed
-            if (twoRows) {
-                dealer.cards[KITTY_GROUP].RowContent(
-                    this@ScorpionGame,
-                    size,
-                    cardPadding = PaddingValues(padding),
-                    horizontalArrangement = Arrangement.spacedBy(spacing.width),
-                    modifier = Modifier
-                        .height(size.height)
-                        .align(Alignment.End)
-                )
+        // Set the offset of the columns
+        val offset = if (twoRows) {
+            // The kitty is a row and above the columns
+            dealer.cards[KITTY_GROUP].let {
+                it.offset = DpOffset(dealer.playAreaSize.width - cardSize.width, 0.dp)
+                it.spacing = DpSize(spacing.width, 0.dp)
             }
+            // Put columns below the kitty
+            DpOffset(0.dp, cardSize.height)
+        } else {
+            // The kitty is a column to the right of the other columns
+            dealer.cards[KITTY_GROUP].let {
+                it.offset = DpOffset(cardSize.width * COLUMN_COUNT, 0.dp)
+                it.spacing = DpSize(0.dp, spacing.height)
+            }
+            // Put columns at top of playable area
+            DpOffset(0.dp, 0.dp)
+        }
+        // Set the offset of each column
+        for (i in 0..<COLUMN_COUNT) {
+            val group = dealer.cards[i]
+            group.offset = DpOffset(offset.x + cardSize.width * i, offset.y)
+            // Set spacing so it is a column
+            group.spacing = DpSize(0.dp, spacing.height)
+        }
+    }
 
-            // Put the other columns in another row and the kitty column if only one row
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.Start)
-            ) {
-                for (group in dealer.cards.indices) {
-                    // Include the kitty column if not two rows
-                    if (group != KITTY_GROUP || !twoRows) {
-                        dealer.cards[group].ColumnContent(
-                            this@ScorpionGame,
-                            size,
-                            cardPadding = PaddingValues(padding),
-                            verticalArrangement = Arrangement.spacedBy(spacing.height),
-                            modifier = Modifier
-                                .width(size.width)
-                                .align(Alignment.Top)
-                        )
+    /** @inheritDoc */
+    @Composable
+    override fun Content(modifier: Modifier) {
+        // Wrap everything in a box that we can scroll
+        Box(
+            modifier = Modifier
+                // Set the offset so we can scroll it
+                .offset { IntOffset(0, scrollOffset.value.roundToPx()) }
+                // Set the size of the content
+                .size(fullSize.value)
+                // The scroll logic
+                .scrollable(
+                    orientation = Orientation.Vertical,
+                    state = rememberScrollableState {
+                        // Calculate the next scroll offset
+                        val next = scrollOffset.value + it.dp
+                        // If it is > 0, then we will scroll down too far
+                        if (next.value > 0.0f) {
+                            // The amount of scroll we use is how far the scroll
+                            // offset is below 0
+                            -scrollOffset.value.value.also {
+                                // The new scrollOffset is 0
+                                scrollOffset.value =  0.dp
+                            }
+                        } else if (next + fullSize.value.height < dealer.playAreaSize.height) {
+                            // We will scroll up to far. The amount of scroll used is the amount
+                            // required to move the bottom of the content to the bottom of the
+                            // playable area.
+                            (dealer.playAreaSize.height.value - scrollOffset.value.value - fullSize.value.height.value).also {
+                                // The new scroll offset puts the bottom of the content to the bottom of the playable area
+                                scrollOffset.value = dealer.playAreaSize.height - fullSize.value.height
+                            }
+                        } else {
+                            // Scroll and use all of the scroll delta
+                            scrollOffset.value += it.dp
+                            it
+                        }
                     }
-                }
+                )
+        ) {
+            // Draw the groups in the playable area
+            for (i in 0..<GROUP_COUNT) {
+                dealer.cards[i].Content(
+                    this@ScorpionGame,
+                    cardPadding = PaddingValues(padding)
+                )
             }
         }
     }
@@ -388,6 +424,24 @@ class ScorpionGame(
             return null
         // Return the highlight
         return filters[highlight]
+    }
+
+    /** @inheritDoc */
+    override fun cardsUpdated() {
+        // Update all of the cards in each group
+        for (group in dealer.cards)
+            group.cardsUpdated(cardSize)
+        // The kitty row offset moves depending on how many cards are visible
+        val kitty = dealer.cards[KITTY_GROUP]
+        // Check spacing for row vs column
+        if (kitty.spacing.height == 0.dp) {
+            kitty.offset = DpOffset(dealer.playAreaSize.width - kitty.size.width, kitty.offset.y)
+        }
+        // Adjust the scroll offset if the content size shrinks
+        fullSize.value = DpSize(fullSize.value.width, dealer.cards.maxOf { it.offset.y + it.size.height })
+        if (fullSize.value.height + scrollOffset.value < dealer.playAreaSize.height) {
+            scrollOffset.value = (dealer.playAreaSize.height - fullSize.value.height).coerceAtMost(0.dp)
+        }
     }
 
     /** @inheritDoc */
@@ -507,10 +561,11 @@ class ScorpionGame(
                 val queen = dealer.drawables[i - 1].card
                 // The king needs to be face up
                 // If the king is in the kitty or not in position 0 it could be moved
-                // If the king is in position 0, it can only be move if the king move alone
-                // and the queen isn't immediately below the queen
+                // If the king is in position 0, it can only be move if the king moves alone
+                // and it isn't the only card in the group and the queen isn't immediately below the king
                 if (king.faceUp && (king.group == KITTY_GROUP || king.position > 0 ||
-                        (kingMovesAlone && (king.group != queen.group || king.position + 1 != queen.position))))
+                        (kingMovesAlone && dealer.cards[king.group].cards.size > 1 &&
+                            (king.group != queen.group || king.position + 1 != queen.position))))
                     return          // We can move the king
             }
         }
@@ -608,7 +663,7 @@ class ScorpionGame(
      * This method doesn't bother to check nesting, because the game
      * doesn't nest undo.
      */
-    private suspend fun <T> withUndo(actions: suspend (generation: Long) -> T): T {
+    private suspend fun <T> withUndo(actions: (generation: Long) -> T): T {
         // Clear the cheated flag and cardChangeCount
         cheated = false
         cardChangeCount = 0
@@ -622,7 +677,7 @@ class ScorpionGame(
                     if (cheated) {
                         cheatCount += 1
                         state.bundle.putInt(CHEAT_COUNT, cheatCount)
-                        dealer.onStateChanged(state)
+                        state.onBundleUpdated()
                     }
                     // Something changed, so clear the cheat flags.
                     cheatCardFlip = false
