@@ -634,19 +634,22 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
             dragTargetCard(card, object : CardDropTarget {
                 override fun onDrop(sourceCard: Card, targetCard: Card, event: DragAndDropEvent): Boolean {
                     return when {
+                        sourceCard.value % CARDS_PER_SUIT == CARDS_PER_SUIT - 1 -> {
+                            if (targetCard.group == DISCARD_GROUP) {
+                                dealer.scope.launch {
+                                    dealer.withUndo { generation ->
+                                        playCard(sourceCard, DISCARD_GROUP, dealer.cards[DISCARD_GROUP].cards.size, generation)
+                                    }
+                                }
+                                true
+                            } else
+                                false
+                        }
                         (((sourceCard.value + targetCard.value) % CARDS_PER_SUIT) == CARDS_PER_SUIT - 2) && sourceCard.playable(targetCard) -> {
                             dealer.scope.launch {
                                 dealer.withUndo { generation ->
                                     playCard(targetCard, DISCARD_GROUP, dealer.cards[DISCARD_GROUP].cards.size, generation)
                                     playCard(sourceCard, DISCARD_GROUP, dealer.cards[DISCARD_GROUP].cards.size + 1, generation)
-                                }
-                            }
-                            true
-                        }
-                        targetCard.group == DISCARD_GROUP && sourceCard.value % CARDS_PER_SUIT == CARDS_PER_SUIT - 1 -> {
-                            dealer.scope.launch {
-                                dealer.withUndo { generation ->
-                                    playCard(sourceCard, DISCARD_GROUP, dealer.cards[DISCARD_GROUP].cards.size, generation)
                                 }
                             }
                             true
