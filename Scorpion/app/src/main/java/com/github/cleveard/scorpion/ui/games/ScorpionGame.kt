@@ -14,7 +14,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.BlendMode
@@ -116,11 +115,11 @@ class ScorpionGame(
     /** Dialog content for the variant dialog */
     private val variantContent = object: DialogContent {
         /** Current moveKittyWhenFlipped value */
-        val moveKitty = mutableStateOf(false)
+        var moveKitty = false
         /** Current hiddenCardColumnCount value */
-        val hiddenCards = mutableIntStateOf(3)
+        var hiddenCards = 3
         /** Current kindMovesAlone value  */
-        val kingMoves = mutableStateOf(true)
+        var kingMoves = true
 
         /** @inheritDoc */
         @Composable
@@ -128,25 +127,25 @@ class ScorpionGame(
             // Add checkbox for moving the kitty
             HorizontalDivider(modifier = Modifier.padding(horizontal = 4.dp))
             TextSwitch(
-                !moveKitty.value,
+                !moveKitty,
                 R.string.move_kitty_when_flipped,
-                onChange = { moveKitty.value = !it }
+                onChange = { moveKitty = !it }
             )
 
             // Add checkbox for number of columns with face down cards
             HorizontalDivider(modifier = Modifier.padding(horizontal = 4.dp))
             TextSwitch(
-                hiddenCards.intValue == 3,
+                hiddenCards == 3,
                 R.string.hidden_cards_3_columns,
-                onChange = { hiddenCards.intValue = if (it) 3 else 4 }
+                onChange = { hiddenCards = if (it) 3 else 4 }
             )
 
             // Add checkbox for king moves alone
             HorizontalDivider(modifier = Modifier.padding(horizontal = 4.dp))
             TextSwitch(
-                kingMoves.value,
+                kingMoves,
                 R.string.king_moves_alone,
-                onChange = { kingMoves.value = it }
+                onChange = { kingMoves = it }
             )
         }
 
@@ -157,21 +156,21 @@ class ScorpionGame(
         /** @inheritDoc */
         override suspend fun onAccept() {
             // Accepted update the changed values in the bundle and notice if it has changed
-            var update = (moveKittyWhenFlipped != moveKitty.value).also {
+            var update = (moveKittyWhenFlipped != moveKitty).also {
                 if (it) {
-                    moveKittyWhenFlipped = moveKitty.value
+                    moveKittyWhenFlipped = moveKitty
                     state.bundle.putBoolean(MOVE_KITTY_WHEN_FLIPPED, moveKittyWhenFlipped)
                 }
             }
-            update = (hiddenCardColumnCount != hiddenCards.intValue).also {
+            update = (hiddenCardColumnCount != hiddenCards).also {
                 if (it) {
-                    hiddenCardColumnCount = hiddenCards.intValue
+                    hiddenCardColumnCount = hiddenCards
                     state.bundle.putInt(HIDDEN_CARD_COLUMN_COUNT, hiddenCardColumnCount)
                 }
             } || update
-            update = (kingMovesAlone != kingMoves.value).also {
+            update = (kingMovesAlone != kingMoves).also {
                 if (it) {
-                    kingMovesAlone = kingMoves.value
+                    kingMovesAlone = kingMoves
                     state.bundle.putBoolean(KING_MOVES_ALONE, kingMovesAlone)
                 }
             } || update
@@ -184,20 +183,20 @@ class ScorpionGame(
         /** @inheritDoc */
         override fun reset() {
             // Reset current values to values from game
-            moveKitty.value = moveKittyWhenFlipped
-            hiddenCards.intValue = hiddenCardColumnCount
-            kingMoves.value = kingMovesAlone
+            moveKitty = moveKittyWhenFlipped
+            hiddenCards = hiddenCardColumnCount
+            kingMoves = kingMovesAlone
         }
     }
 
     /** Content for the settings dialog */
     private val settingsContent = object: DialogContent {
         /** Current value of showHighlights */
-        val showHints = mutableStateOf(false)
+        var showHints = false
         /** Current value of cheatCardFlip */
-        var cheatFlip = mutableStateOf(false)
+        var cheatFlip = false
         /** Current value of cheatMoveCard */
-        var cheatMove = mutableStateOf(false)
+        var cheatMove = false
 
         /** @inheritDoc */
         @Composable
@@ -205,9 +204,9 @@ class ScorpionGame(
             // Add the checkbox for showHighlights
             HorizontalDivider()
             TextSwitch(
-                showHints.value,
+                showHints,
                 R.string.show_highlights,
-                onChange = { showHints.value = it }
+                onChange = { showHints = it }
             )
 
             Spacer(Modifier.height(8.dp))
@@ -218,16 +217,16 @@ class ScorpionGame(
             // Add checkbox for cheatCardFlip
             HorizontalDivider(Modifier.padding(top = 4.dp))
             TextSwitch(
-                cheatFlip.value,
+                cheatFlip,
                 R.string.cheat_card_flip,
-                onChange = { cheatFlip.value = it }
+                onChange = { cheatFlip = it }
             )
             // Add checkbox for cheatMoveCards
             HorizontalDivider()
             TextSwitch(
-                cheatMove.value,
+                cheatMove,
                 R.string.cheat_move_card,
-                onChange = { cheatMove.value = it }
+                onChange = { cheatMove = it }
             )
         }
 
@@ -239,15 +238,15 @@ class ScorpionGame(
         override suspend fun onAccept() {
             // The settings were accepted
             // Set the cheat flags
-            cheatCardFlip = cheatFlip.value
-            cheatMoveCard = cheatMove.value
+            cheatCardFlip = cheatFlip
+            cheatMoveCard = cheatMove
 
             // Update showHighlights in the bundle
             var update = false
-            update = (showHints.value != showHighlights.value).also {
+            update = (showHints != showHighlights.value).also {
                 if (it) {
-                    showHighlights.value = showHints.value
-                    state.bundle.putBoolean(SHOW_HIGHLIGHTS, showHints.value)
+                    showHighlights.value = showHints
+                    state.bundle.putBoolean(SHOW_HIGHLIGHTS, showHints)
                 }
             } || update
 
@@ -259,9 +258,9 @@ class ScorpionGame(
         /** @inheritDoc */
         override fun reset() {
             // Reset the current values to the values from the game
-            showHints.value = showHighlights.value
-            cheatFlip.value = cheatCardFlip
-            cheatMove.value = cheatMoveCard
+            showHints = showHighlights.value
+            cheatFlip = cheatCardFlip
+            cheatMove = cheatMoveCard
         }
     }
 

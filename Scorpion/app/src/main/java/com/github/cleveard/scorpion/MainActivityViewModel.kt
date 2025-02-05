@@ -280,9 +280,9 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
         // The selected card back image
         val selectedPath = mutableStateOf(cardBackAssetPath)
         // The selected undo card flips value
-        val undoFlips = mutableStateOf(undoCardFlips.value)
+        var undoFlips = undoCardFlips.value
         // The selected use system theme value
-        val systemTheme = mutableStateOf(useSystemTheme)
+        var systemTheme = useSystemTheme
         // The current game settings content
         val gameContent: DialogContent? = game.settingsContent()
         // Reset the content to the current settings
@@ -346,9 +346,9 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
 
             // Checkbox to allow card flips to undo
             TextSwitch(
-                undoFlips.value,
+                undoFlips,
                 R.string.allow_undo_for_flips,
-                onChange = { undoFlips.value = it }
+                onChange = { undoFlips = it }
             )
 
             // If the system support personal colors, then let the user
@@ -357,9 +357,9 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
                 HorizontalDivider()
 
                 TextSwitch(
-                    systemTheme.value,
+                    systemTheme,
                     R.string.use_system_theme,
-                    onChange = { systemTheme.value = it }
+                    onChange = { systemTheme = it }
                 )
             }
 
@@ -370,7 +370,7 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
         // If the settings are accepted
         if (value == R.string.accept) {
             // Update the bundle for each setting and note whether it changed
-            var update = updateState(_cardBack, selectedPath, commonState.bundle) { putString(CARD_BACK_IMAGE, it) }
+            var update = updateState(_cardBack, selectedPath.value, commonState.bundle) { putString(CARD_BACK_IMAGE, it) }
             update = updateState(undoCardFlips, undoFlips, commonState.bundle) { putBoolean(ALLOW_UNDO_FOR_FLIPS, it) } || update
             update = updateState(_useSystemTheme, systemTheme, commonState.bundle ) { putBoolean(USE_SYSTEM_THEME, it) } || update
             if (update) {
@@ -387,13 +387,13 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
     /**
      * Helper function to update the bundle
      */
-    private fun <T> updateState(current: MutableState<T>, changed: MutableState<T>, bundle: Bundle, update: Bundle.(value: T) -> Unit): Boolean {
+    private fun <T> updateState(current: MutableState<T>, changed: T, bundle: Bundle, update: Bundle.(value: T) -> Unit): Boolean {
         // Let the caller know whether something changed
-        return (current.value != changed.value).also {
+        return (current.value != changed).also {
             if (it) {
                 // Update view model and database
-                current.value = changed.value
-                bundle.update(changed.value)
+                current.value = changed
+                bundle.update(changed)
             }
         }
     }
@@ -852,7 +852,7 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
             }
             inconsistentDatabase("Card deck and groups are out of sync - $d")
         }
-        // Make sure each drawble in the groups has the correct group and position
+        // Make sure each drawable in the groups has the correct group and position
         cardGroups.indices.forEach {group ->
             val cards = cardGroups[group].cards
             cards.indices.forEach {position ->

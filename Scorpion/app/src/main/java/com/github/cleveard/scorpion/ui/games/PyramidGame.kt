@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draganddrop.DragAndDropEvent
@@ -45,11 +44,11 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
     /** Dialog content for the variant dialog */
     private val variantContent = object: DialogContent {
         /** Current moveKittyWhenFlipped value */
-        val twoPass = mutableIntStateOf(2)
+        var twoPass = 2
         /** Current hiddenCardColumnCount value */
-        val clearPyramidWins = mutableStateOf(true)
+        var clearPyramidWins = true
         /** Current kindMovesAlone value  */
-        val playPartial = mutableStateOf(true)
+        var playPartial = true
 
         /** @inheritDoc */
         @Composable
@@ -57,25 +56,25 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
             // Add checkbox for two passes of the cards
             HorizontalDivider(modifier = Modifier.padding(horizontal = 4.dp))
             TextSwitch(
-                twoPass.intValue == 2,
+                twoPass == 2,
                 R.string.pass_cards_twice,
-                onChange = { twoPass.intValue = if (it) 2 else 1 }
+                onChange = { twoPass = if (it) 2 else 1 }
             )
 
             // Add checkbox to win by clearing the pyramid
             HorizontalDivider(modifier = Modifier.padding(horizontal = 4.dp))
             TextSwitch(
-                clearPyramidWins.value,
+                clearPyramidWins,
                 R.string.clear_pyramid_wins,
-                onChange = { clearPyramidWins.value = it }
+                onChange = { clearPyramidWins = it }
             )
 
             // Add checkbox to allow playing partial covers
             HorizontalDivider(modifier = Modifier.padding(horizontal = 4.dp))
             TextSwitch(
-                playPartial.value,
+                playPartial,
                 R.string.play_partial_covers,
-                onChange = { playPartial.value = it }
+                onChange = { playPartial = it }
             )
         }
 
@@ -86,21 +85,21 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
         /** @inheritDoc */
         override suspend fun onAccept() {
             // Accepted update the changed values in the bundle and notice if it has changed
-            var update = (stockPassCount != twoPass.intValue).also {
+            var update = (stockPassCount != twoPass).also {
                 if (it) {
-                    stockPassCount = twoPass.intValue
+                    stockPassCount = twoPass
                     state.bundle.putInt(STOCK_PASS_COUNT, stockPassCount)
                 }
             }
-            update = (clearPyramidOnly != clearPyramidWins.value).also {
+            update = (clearPyramidOnly != clearPyramidWins).also {
                 if (it) {
-                    clearPyramidOnly = clearPyramidWins.value
+                    clearPyramidOnly = clearPyramidWins
                     state.bundle.putBoolean(CLEAR_PYRAMID_ONLY, clearPyramidOnly)
                 }
             } || update
-            update = (playPartialCover != playPartial.value).also {
+            update = (playPartialCover != playPartial).also {
                 if (it) {
-                    playPartialCover = playPartial.value
+                    playPartialCover = playPartial
                     state.bundle.putBoolean(PLAY_PARTIAL_COVER, playPartialCover)
                 }
             } || update
@@ -113,16 +112,16 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
         /** @inheritDoc */
         override fun reset() {
             // Reset current values to values from game
-            twoPass.intValue = stockPassCount
-            clearPyramidWins.value = clearPyramidOnly
-            playPartial.value = playPartialCover
+            twoPass = stockPassCount
+            clearPyramidWins = clearPyramidOnly
+            playPartial = playPartialCover
         }
     }
 
     /** Content for the settings dialog */
     private val settingsContent = object: DialogContent {
         /** Current value of showHighlights */
-        val showHints = mutableStateOf(false)
+        var showHints = false
 
         /** @inheritDoc */
         @Composable
@@ -130,9 +129,9 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
             // Add the checkbox for showHighlights
             HorizontalDivider()
             TextSwitch(
-                showHints.value,
+                showHints,
                 R.string.show_highlights,
-                onChange = { showHints.value = it }
+                onChange = { showHints = it }
             )
         }
 
@@ -144,10 +143,10 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
         override suspend fun onAccept() {
             // Update showHighlights in the bundle
             var update = false
-            update = (showHints.value != showHighlights.value).also {
+            update = (showHints != showHighlights.value).also {
                 if (it) {
-                    showHighlights.value = showHints.value
-                    state.bundle.putBoolean(SHOW_HIGHLIGHTS, showHints.value)
+                    showHighlights.value = showHints
+                    state.bundle.putBoolean(SHOW_HIGHLIGHTS, showHints)
                 }
             } || update
 
@@ -159,7 +158,7 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
         /** @inheritDoc */
         override fun reset() {
             // Reset the current values to the values from the game
-            showHints.value = showHighlights.value
+            showHints = showHighlights.value
         }
     }
 
