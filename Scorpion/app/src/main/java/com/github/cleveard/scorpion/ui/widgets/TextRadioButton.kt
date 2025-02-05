@@ -1,5 +1,6 @@
 package com.github.cleveard.scorpion.ui.widgets
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.MaterialTheme
@@ -34,7 +35,8 @@ fun TextRadioButton(selected: Boolean, textId: Int, modifier: Modifier = Modifie
         Text(
             stringResource(textId),
             fontSize = MaterialTheme.typography.bodySmall.fontSize,
-            fontStyle = MaterialTheme.typography.bodySmall.fontStyle
+            fontStyle = MaterialTheme.typography.bodySmall.fontStyle,
+            modifier = Modifier.clickable { onChange() }
         )
     }
 }
