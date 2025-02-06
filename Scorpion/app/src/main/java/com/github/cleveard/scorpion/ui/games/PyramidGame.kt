@@ -7,7 +7,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.BlendModeColorFilter
 import androidx.compose.ui.graphics.Color
@@ -22,11 +21,14 @@ import com.github.cleveard.scorpion.db.Card
 import com.github.cleveard.scorpion.db.StateEntity
 import com.github.cleveard.scorpion.ui.Dealer
 import com.github.cleveard.scorpion.ui.DialogContent
-import com.github.cleveard.scorpion.ui.widgets.CardDropTarget
+import com.github.cleveard.scorpion.ui.widgets.CardDrawable
+import com.github.cleveard.scorpion.ui.widgets.DropCard
+import com.github.cleveard.scorpion.ui.widgets.CardGroup
 import com.github.cleveard.scorpion.ui.widgets.TextSwitch
 import kotlinx.coroutines.launch
 
-class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
+class PyramidGame(dealer: Dealer, state: StateEntity): Game(
+    dealer,
     state,
     PyramidGame::class.qualifiedName!!,
     GROUP_COUNT,
@@ -277,10 +279,12 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
                 dealer.game,
                 cardPadding = PaddingValues(cardPadding),
                 gestures = {
-                    dragSourceCard(it).dragTargetCard(it).clickableCard(it)
+                    dragAndDropCard(it).clickableCard(it)
                 }
             )
         }
+
+        DragContent(cardPadding)
     }
 
     override fun variantContent(): DialogContent {
@@ -602,80 +606,74 @@ class PyramidGame(private val dealer: Dealer, state: StateEntity): Game(
     }
 
     @Composable
-    fun Modifier.clickableCard(card: Card): Modifier {
+    fun Modifier.clickableCard(drawable: CardDrawable): Modifier {
         // Any card in the pyramid can be clicked, only
         // the top card of the stock and waste groups can be clicked and
         // the discard group cannot be clicked
         when {
-            (card.group == STOCK_GROUP) ||
-                (card.group == WASTE_GROUP) -> {
-                if (dealer.cards[card.group].cards.lastIndex != card.position)
+            (drawable.card.group == STOCK_GROUP) ||
+                (drawable.card.group == WASTE_GROUP) -> {
+                if (dealer.cards[drawable.card.group].cards.lastIndex != drawable.card.position)
                     return this
             }
-            (card.group >= ROW_COUNT) -> return this
+            (drawable.card.group >= ROW_COUNT) -> return this
         }
 
-        return with(dealer.cards[card.group]) {
-            clickGestures(card, this@PyramidGame)
-        }
-    }
-
-    @Composable
-    fun Modifier.dragTargetCard(card: Card): Modifier {
-        // Any card in the pyramid can be a drop target, but only
-        // the top card of the stock, waste and discard groups can
-        if ((card.group == STOCK_GROUP ||
-                card.group == WASTE_GROUP ||
-                card.group == DISCARD_GROUP) &&
-            dealer.cards[card.group].cards.lastIndex != card.position)
-            return this
-
-        return with(dealer.cards[card.group]) {
-            dragTargetCard(card, object : CardDropTarget {
-                override fun onDrop(sourceCard: Card, targetCard: Card, event: DragAndDropEvent): Boolean {
-                    return when {
-                        sourceCard.value % CARDS_PER_SUIT == CARDS_PER_SUIT - 1 -> {
-                            if (targetCard.group == DISCARD_GROUP) {
-                                dealer.scope.launch {
-                                    dealer.withUndo { generation ->
-                                        playCard(sourceCard, DISCARD_GROUP, dealer.cards[DISCARD_GROUP].cards.size, generation)
-                                    }
-                                }
-                                true
-                            } else
-                                false
-                        }
-                        (((sourceCard.value + targetCard.value) % CARDS_PER_SUIT) == CARDS_PER_SUIT - 2) && sourceCard.playable(targetCard) -> {
-                            dealer.scope.launch {
-                                dealer.withUndo { generation ->
-                                    playCard(targetCard, DISCARD_GROUP, dealer.cards[DISCARD_GROUP].cards.size, generation)
-                                    playCard(sourceCard, DISCARD_GROUP, dealer.cards[DISCARD_GROUP].cards.size + 1, generation)
-                                }
-                            }
-                            true
-                        }
-                        else -> false
-                    }
-                }
-            })
+        return with(CardGroup) {
+            clickGestures(drawable, this@PyramidGame)
         }
     }
 
     @Composable
-    fun Modifier.dragSourceCard(card: Card): Modifier {
+    fun Modifier.dragAndDropCard(drawable: CardDrawable): Modifier {
         // Any card in the pyramid can be a drag source, only
         // the top card of the stock and waste groups can be a drag source and
         // the discard group cannot be a drag source
         when {
-            (card.group == STOCK_GROUP) ||
-                (card.group == WASTE_GROUP) -> {
-                if (dealer.cards[card.group].cards.lastIndex != card.position)
+            (drawable.card.group == STOCK_GROUP) ||
+                (drawable.card.group == WASTE_GROUP) -> {
+                if (dealer.cards[drawable.card.group].cards.lastIndex != drawable.card.position)
                     return this
             }
-            (card.group >= ROW_COUNT) -> return this
+            (drawable.card.group >= ROW_COUNT) -> return this
         }
-        return with(dealer.cards[card.group]) {
-            dragSourceCard(card)
+        return with(CardGroup) {
+            drawAndDropCard(drawable, object : DropCard {
+                override val cards: List<CardGroup>
+                    get() = dealer.cards
+
+                override fun onStarted(sourceDrawable: CardDrawable, dragDrawables: (List<CardDrawable>) -> List<CardGroup>): List<CardGroup> {
+                    return dragDrawables(listOf(sourceDrawable)).also {
+                        startDrag(it)
+                    }
+                }
+
+                override fun onEnded(sourceDrawable: CardDrawable, targetDrawable: CardDrawable?) {
+                    endDrag()
+                    targetDrawable?.also { dropOn ->
+                        when {
+                            sourceDrawable.card.value % CARDS_PER_SUIT == CARDS_PER_SUIT - 1 -> {
+                                if (dropOn.card.group == DISCARD_GROUP) {
+                                    dealer.scope.launch {
+                                        dealer.withUndo { generation ->
+                                            playCard(sourceDrawable.card, DISCARD_GROUP, dealer.cards[DISCARD_GROUP].cards.size, generation)
+                                        }
+                                    }
+                                }
+                            }
+
+                            (((sourceDrawable.card.value + dropOn.card.value) % CARDS_PER_SUIT) == CARDS_PER_SUIT - 2) && sourceDrawable.card.playable(dropOn.card) -> {
+                                dealer.scope.launch {
+                                    dealer.withUndo { generation ->
+                                        playCard(dropOn.card, DISCARD_GROUP, dealer.cards[DISCARD_GROUP].cards.size, generation)
+                                        playCard(sourceDrawable.card, DISCARD_GROUP, dealer.cards[DISCARD_GROUP].cards.size + 1, generation)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            })
         }
     }
 

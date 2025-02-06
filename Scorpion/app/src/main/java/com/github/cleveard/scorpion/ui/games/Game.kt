@@ -1,16 +1,22 @@
 package com.github.cleveard.scorpion.ui.games
 
-import androidx.compose.foundation.layout.BoxWithConstraintsScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.Dp
 import com.github.cleveard.scorpion.db.Card
 import com.github.cleveard.scorpion.db.StateEntity
 import com.github.cleveard.scorpion.ui.Actions
+import com.github.cleveard.scorpion.ui.Dealer
 import com.github.cleveard.scorpion.ui.DialogContent
+import com.github.cleveard.scorpion.ui.widgets.CardGroup
 
 sealed class Game(
+    /** Database and card manager */
+    protected val dealer: Dealer,
     /** The state of the game */
     val state: StateEntity,
     /** The qualified class name of the game */
@@ -22,6 +28,13 @@ sealed class Game(
 ): Actions {
     /** The asset path for image use for backs of cards */
     abstract val cardBackAssetPath: String
+
+    /** Save pass values for cards being dragged */
+    private val savePasses: MutableMap<Int, CardGroup.Pass> = mutableMapOf()
+    /** The list of groups being dragged */
+    private val _dragPass: MutableState<List<CardGroup>?> = mutableStateOf(null)
+    private val dragPass: List<CardGroup>?
+        get() = _dragPass.value
 
     /**
      * Get the asset path for the image of the front of a card
@@ -71,7 +84,6 @@ sealed class Game(
 
     /**
      * Check whether the game is over
-     * @param list The current values of all of the cards
      * @param generation The current generation
      * The game can do more or less what it wants. It can update cards
      * or show a dialog
@@ -89,6 +101,70 @@ sealed class Game(
      * the drawable offsets and sizes
      */
     abstract fun cardsUpdated()
+
+    /**
+     * Start dragging cards
+     * @param cardsToDrag The list of card groups to drag
+     */
+    fun startDrag(cardsToDrag: List<CardGroup>) {
+        // Better not be dragging already
+        if (_dragPass.value != null)
+            throw java.lang.IllegalArgumentException("Dragging already started")
+        // All groups had better be for the drag pass
+        if (cardsToDrag.any { it.pass != CardGroup.Pass.Drag })
+            throw java.lang.IllegalArgumentException("Drag pass groups must use Pass.Drag")
+        // Clear the saved passes
+        savePasses.clear()
+        // Add the current passes for each drawable in cardsToDrag
+        cardsToDrag.forEach { g ->
+            g.cards.forEach {d ->
+                d?.let {
+                    // Save the drawable pss
+                    savePasses[it.card.value] = it.pass
+                }
+            }
+        }
+        // Set the pass for each drawable to Drag
+        savePasses.forEach {
+            dealer.drawables[it.key].pass = CardGroup.Pass.Drag
+        }
+        // Start composing the dragging cards
+        _dragPass.value = cardsToDrag
+    }
+
+    /**
+     * End dragging cards
+     */
+    fun endDrag() {
+        // Ignore the call if we aren't dragging
+        _dragPass.value?.let {
+            // Restore the passes for all of the drawables
+            savePasses.forEach {
+                dealer.drawables[it.key].pass = it.value
+            }
+            // Clear the saved passes
+            savePasses.clear()
+            // Stop composing the dragging cards
+            _dragPass.value = null
+        }
+    }
+
+    /**
+     * Compose the dragging cards
+     * Add this at the end of the game content so
+     * the dragging cards are on top of everything else
+     */
+    @Composable
+    fun DragContent(cardPadding: Dp) {
+        // Just compose the content for each group
+        dragPass?.forEach {group ->
+            group.Content(
+                dealer.game,
+                cardPadding = PaddingValues(cardPadding),
+                gestures = { this }
+            )
+        }
+    }
 
     companion object {
         const val CARDS_PER_SUIT: Int = 13

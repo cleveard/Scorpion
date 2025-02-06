@@ -23,6 +23,7 @@ class CardDrawable(
     private val _imagePath: MutableState<String?> = mutableStateOf(null)
     private val _colorFilter: MutableState<ColorFilter?> = mutableStateOf(null)
     private val _offsetPos: MutableIntState = mutableIntStateOf(0)
+    private val _pass: MutableState<CardGroup.Pass> = mutableStateOf(CardGroup.Pass.Main)
 
     /** Offset of this card in card group */
     var offset: DpOffset
@@ -48,6 +49,11 @@ class CardDrawable(
     var colorFilter: ColorFilter?
         get() = _colorFilter.value
         set(value) { _colorFilter.value = value }
+
+    /** The pass this drawable is drawn in */
+    var pass: CardGroup.Pass
+        get() = _pass.value
+        set(value) { _pass.value = value }
 
     /**
      * The number of visible cards and spacers before this card

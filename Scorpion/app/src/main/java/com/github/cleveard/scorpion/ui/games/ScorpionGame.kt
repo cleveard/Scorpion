@@ -76,9 +76,10 @@ import kotlinx.coroutines.launch
  *     if it isn't at the bottom of a column. Kings are moved above the corresponding queen.
  */
 class ScorpionGame(
-    private val dealer: Dealer,
+    dealer: Dealer,
     state: StateEntity
 ): Game(
+    dealer,
     // Game state entity
     state,
     // Qualified class name
