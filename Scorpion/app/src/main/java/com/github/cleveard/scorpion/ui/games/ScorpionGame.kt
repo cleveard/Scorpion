@@ -370,28 +370,33 @@ class ScorpionGame(
                 .scrollable(
                     orientation = Orientation.Vertical,
                     state = rememberScrollableState {
-                        // Calculate the next scroll offset
-                        val next = scrollOffset.value + it.dp
-                        // If it is > 0, then we will scroll down too far
-                        if (next.value > 0.0f) {
-                            // The amount of scroll we use is how far the scroll
-                            // offset is below 0
-                            -scrollOffset.value.value.also {
-                                // The new scrollOffset is 0
-                                scrollOffset.value =  0.dp
-                            }
-                        } else if (next + fullSize.value.height < dealer.playAreaSize.height) {
-                            // We will scroll up to far. The amount of scroll used is the amount
-                            // required to move the bottom of the content to the bottom of the
-                            // playable area.
-                            (dealer.playAreaSize.height.value - scrollOffset.value.value - fullSize.value.height.value).also {
-                                // The new scroll offset puts the bottom of the content to the bottom of the playable area
-                                scrollOffset.value = dealer.playAreaSize.height - fullSize.value.height
-                            }
-                        } else {
-                            // Scroll and use all of the scroll delta
-                            scrollOffset.value += it.dp
+                        if (fullSize.value.height <= dealer.playAreaSize.height) {
+                            scrollOffset.value = 0.dp
                             it
+                        } else {
+                            // Calculate the next scroll offset
+                            val next = scrollOffset.value + it.dp
+                            // If it is > 0, then we will scroll down too far
+                            if (next.value > 0.0f) {
+                                // The amount of scroll we use is how far the scroll
+                                // offset is below 0
+                                -scrollOffset.value.value.also {
+                                    // The new scrollOffset is 0
+                                    scrollOffset.value = 0.dp
+                                }
+                            } else if (next + fullSize.value.height < dealer.playAreaSize.height) {
+                                // We will scroll up to far. The amount of scroll used is the amount
+                                // required to move the bottom of the content to the bottom of the
+                                // playable area.
+                                (dealer.playAreaSize.height.value - scrollOffset.value.value - fullSize.value.height.value).also {
+                                    // The new scroll offset puts the bottom of the content to the bottom of the playable area
+                                    scrollOffset.value = dealer.playAreaSize.height - fullSize.value.height
+                                }
+                            } else {
+                                // Scroll and use all of the scroll delta
+                                scrollOffset.value += it.dp
+                                it
+                            }
                         }
                     }
                 )
