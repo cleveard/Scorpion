@@ -639,7 +639,7 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
             (drawable.card.group >= ROW_COUNT) -> return this
         }
         return with(CardGroup) {
-            drawAndDropCard(drawable, object : DropCard {
+            dragAndDropCard(drawable, object : DropCard {
                 override val cards: List<CardGroup>
                     get() = dealer.cards
 

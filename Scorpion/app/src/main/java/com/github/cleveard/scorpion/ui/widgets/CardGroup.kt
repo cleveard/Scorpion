@@ -162,7 +162,7 @@ class CardGroup(val pass: Pass = Pass.Main) {
         }
 
         @Composable
-        fun Modifier.drawAndDropCard(drawable: CardDrawable, drop: DropCard): Modifier {
+        fun Modifier.dragAndDropCard(drawable: CardDrawable, drop: DropCard): Modifier {
             val dragger = remember { CardDragger(drop) }
             return pointerInput(Unit) {
                 detectDragGestures(
