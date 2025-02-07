@@ -153,7 +153,7 @@ class CardDragger(private val drop: DropCard) {
                 // Found a group find the card in the group
                 for (j in g.cards.lastIndex downTo 0) {
                     g.cards[j]?.let {d ->
-                        if (d.pass == CardGroup.Pass.Main) {
+                        if (d.pass == CardGroup.Pass.Main && d.card.faceUp) {
                             val cardDelta = groupDelta - d.offset
                             if (cardDelta.x >= 0.dp && cardDelta.y >= 0.dp && cardDelta.x < d.size.width && cardDelta.y < d.size.height) {
                                 // Found a card

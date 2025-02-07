@@ -625,6 +625,15 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
         }
     }
 
+    private fun dropCardCount(drag: CardDrawable, drop: CardDrawable): Int {
+        return if (drag.card.value % CARDS_PER_SUIT == CARDS_PER_SUIT - 1 && drag.card.playable() != null && drop.card.group == DISCARD_GROUP)
+            1
+        else if ((drag.card.value + drop.card.value) % CARDS_PER_SUIT == CARDS_PER_SUIT - 2 && drag.card.playable(drop.card))
+            2
+        else
+            0
+    }
+
     @Composable
     fun Modifier.dragAndDropCard(drawable: CardDrawable): Modifier {
         // Any card in the pyramid can be a drag source, only
@@ -640,6 +649,7 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
         }
         return with(CardGroup) {
             dragAndDropCard(drawable, object : DropCard {
+                private var filter: ColorFilter? = null
                 override val cards: List<CardGroup>
                     get() = dealer.cards
 
@@ -649,26 +659,27 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
                     }
                 }
 
+                override fun onEntered(sourceDrawable: CardDrawable, targetDrawable: CardDrawable) {
+                    filter = targetDrawable.colorFilter
+                    if (dropCardCount(sourceDrawable, targetDrawable) > 0)
+                        targetDrawable.colorFilter = dropFilter
+                }
+
+                override fun onExited(sourceDrawable: CardDrawable, targetDrawable: CardDrawable) {
+                    targetDrawable.colorFilter = filter
+                    filter = null
+                }
+
                 override fun onEnded(sourceDrawable: CardDrawable, targetDrawable: CardDrawable?) {
                     endDrag()
                     targetDrawable?.also { dropOn ->
-                        when {
-                            sourceDrawable.card.value % CARDS_PER_SUIT == CARDS_PER_SUIT - 1 -> {
-                                if (dropOn.card.group == DISCARD_GROUP) {
-                                    dealer.scope.launch {
-                                        dealer.withUndo { generation ->
-                                            playCard(sourceDrawable.card, DISCARD_GROUP, dealer.cards[DISCARD_GROUP].cards.size, generation)
-                                        }
-                                    }
-                                }
-                            }
-
-                            (((sourceDrawable.card.value + dropOn.card.value) % CARDS_PER_SUIT) == CARDS_PER_SUIT - 2) && sourceDrawable.card.playable(dropOn.card) -> {
-                                dealer.scope.launch {
-                                    dealer.withUndo { generation ->
-                                        playCard(dropOn.card, DISCARD_GROUP, dealer.cards[DISCARD_GROUP].cards.size, generation)
-                                        playCard(sourceDrawable.card, DISCARD_GROUP, dealer.cards[DISCARD_GROUP].cards.size + 1, generation)
-                                    }
+                        val count = dropCardCount(sourceDrawable, dropOn)
+                        if (count > 0) {
+                            dealer.scope.launch {
+                                dealer.withUndo { generation ->
+                                    playCard(sourceDrawable.card, DISCARD_GROUP, dealer.cards[DISCARD_GROUP].cards.size, generation)
+                                    if (count > 1)
+                                        playCard(targetDrawable.card, DISCARD_GROUP, dealer.cards[DISCARD_GROUP].cards.size + 1, generation)
                                 }
                             }
                         }
@@ -698,8 +709,8 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
         const val PLAY_PARTIAL_COVER = "play_partial_games"
         const val SHOW_HIGHLIGHTS = "show_highlights"
 
-        val selectFilter = BlendModeColorFilter(Color(0xFFA0A0A0), BlendMode.Multiply)
-        val matchFilter = BlendModeColorFilter(Color(0xFFA0FFA0), BlendMode.Multiply)
-
+        val selectFilter = BlendModeColorFilter(Color(0x60000000), BlendMode.SrcOver)
+        val matchFilter = BlendModeColorFilter(Color(0x6000FF00), BlendMode.SrcOver)
+        val dropFilter = BlendModeColorFilter(Color(0x600000FF), BlendMode.SrcOver)
     }
 }

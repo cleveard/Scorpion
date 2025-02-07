@@ -892,9 +892,9 @@ class ScorpionGame(
         /** The filter used for the highlights */
         private val filters: List<ColorFilter?> = listOf(
             null,
-            BlendModeColorFilter(Color(0xFFA0A0A0), BlendMode.Multiply),
-            BlendModeColorFilter(Color(0xFFA0FFA0), BlendMode.Multiply),
-            BlendModeColorFilter(Color(0xFFFFA0A0), BlendMode.Multiply)
+            BlendModeColorFilter(Color(0x60000000), BlendMode.SrcOver),
+            BlendModeColorFilter(Color(0x6000FF00), BlendMode.SrcOver),
+            BlendModeColorFilter(Color(0x60FF0000), BlendMode.SrcOver)
         )
     }
 }
