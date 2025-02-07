@@ -1,6 +1,5 @@
 package com.github.cleveard.scorpion.ui.widgets
 
-import android.util.Log
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -19,7 +18,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntOffset
@@ -165,26 +163,24 @@ class CardGroup(val pass: Pass = Pass.Main) {
 
         @Composable
         fun Modifier.drawAndDropCard(drawable: CardDrawable, drop: DropCard): Modifier {
-            with (LocalDensity.current) {
-                val dragger = remember { CardDragger(drop) }
-                return pointerInput(Unit) {
-                    detectDragGestures(
-                        onDragStart = {
-                            with(dragger) {
-                                start(drawable, it)
-                            }
-                        },
-                        onDragEnd = {
-                            dragger.end(drawable)
-                        },
-                        onDragCancel = {
-                            dragger.cancel(drawable)
-                        }
-                    ) { change, dragAmount ->
-                        change.consume()
+            val dragger = remember { CardDragger(drop) }
+            return pointerInput(Unit) {
+                detectDragGestures(
+                    onDragStart = {
                         with(dragger) {
-                            drag(drawable, dragAmount)
+                            start(drawable, it)
                         }
+                    },
+                    onDragEnd = {
+                        dragger.end(drawable)
+                    },
+                    onDragCancel = {
+                        dragger.cancel(drawable)
+                    }
+                ) { change, dragAmount ->
+                    change.consume()
+                    with(dragger) {
+                        drag(drawable, dragAmount)
                     }
                 }
             }
