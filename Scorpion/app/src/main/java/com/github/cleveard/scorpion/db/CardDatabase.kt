@@ -101,7 +101,7 @@ abstract class CardDatabase: RoomDatabase() {
 
         // Make sure all cards have the correct generation
         if (cards.any { it.generation != generation })
-            throw IllegalArgumentException("Cards do not have correct generation")
+            throw DatabaseInconsistency("Cards do not have correct generation")
         // Clear redo at or after generation
         clearRedo(generation)
         // Update the generation for the game
@@ -182,4 +182,6 @@ abstract class CardDatabase: RoomDatabase() {
             return true
         }
     }
+
+    class DatabaseInconsistency(msg: String? = null, cause: Throwable? = null): Exception(msg, cause)
 }

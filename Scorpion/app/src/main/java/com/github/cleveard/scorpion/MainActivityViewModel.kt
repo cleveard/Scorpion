@@ -194,7 +194,8 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
                     maxGeneration.value = 0L
                     success = true
                 }
-            } catch (_: DatabaseInconsistency) {
+            } catch (e: CardDatabase.DatabaseInconsistency) {
+                inconsistentDatabase(e.message)
             } finally {
                 if (!success)
                     resetGame()
@@ -489,13 +490,11 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
 
     /**
      * Report an inconsistentDatabase error
-     * and throw and exception
      * @param error A string describing the error.
      */
-    private fun inconsistentDatabase(error: String) {
-        // Show an alert and to start a new game
+    private fun inconsistentDatabase(@Suppress("UNUSED_PARAMETER") error: String?) {
+        // Show an alert and start a new game
         showNewGameOrDismissAlert(R.string.database_inconsistency, R.string.error)
-        throw DatabaseInconsistency(error)
     }
 
     /**
@@ -553,7 +552,7 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
                     Log.d(LOG_TAG, "Card: $d")  // Or just the loaded card if they are the same
             }
             // Show an alert and to start a new game
-            inconsistentDatabase(error)
+            throw CardDatabase.DatabaseInconsistency(error)
         }
     }
 
@@ -639,7 +638,8 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
                         success = true
                     }
                 }
-            } catch (_: DatabaseInconsistency) {
+            } catch (e: CardDatabase.DatabaseInconsistency) {
+                inconsistentDatabase(e.message)
             }
             result
         } finally {
@@ -687,7 +687,8 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
                         success = true
                     }
                 }
-            } catch (_: DatabaseInconsistency) {
+            } catch (e: CardDatabase.DatabaseInconsistency) {
+                inconsistentDatabase(e.message)
                 null
             } finally {
                 if (!success)
@@ -712,7 +713,8 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
                     ++generation.value
                     success = true
                 }
-            } catch (_: DatabaseInconsistency) {
+            } catch (e: CardDatabase.DatabaseInconsistency) {
+                inconsistentDatabase(e.message)
                 null
             } finally {
                 if (!success)
@@ -782,7 +784,7 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
         // Set the cards in the list
         for (c in changed) {
             if (c.group >= groupCount)
-                inconsistentDatabase("Group larger than expected")
+                throw CardDatabase.DatabaseInconsistency("Group larger than expected")
             drawables[c.value].card = c
         }
 
@@ -850,7 +852,7 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
                 if (other !== it)
                     Log.d("DATABASE", "$it.card}\n!== $other}")
             }
-            inconsistentDatabase("Card deck and groups are out of sync - $d")
+            throw CardDatabase.DatabaseInconsistency("Card deck and groups are out of sync - $d")
         }
         // Make sure each drawable in the groups has the correct group and position
         cardGroups.indices.forEach {group ->
@@ -858,14 +860,14 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
             cards.indices.forEach {position ->
                 cards[position]?.card?.let { card ->
                     if (card.group != group || card.position != position)
-                        inconsistentDatabase("Card deck and groups are out of sync - ($group,$position) = $card")
+                        throw CardDatabase.DatabaseInconsistency("Card deck and groups are out of sync - ($group,$position) = $card")
                 }
             }
         }
         // Let the game make its own checks
         game.isValid().also {
             if (it != null)
-                inconsistentDatabase(it)
+                throw CardDatabase.DatabaseInconsistency(it)
         }
     }
 
@@ -910,7 +912,8 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
                                 generation.value = state.generation
                                 minGeneration.value = dbMinGeneration
                                 maxGeneration.value = dbMaxGeneration
-                            } catch (_: DatabaseInconsistency) {
+                            } catch (e: CardDatabase.DatabaseInconsistency) {
+                                inconsistentDatabase(e.message)
                                 null
                             }
                         } ?: deal()         // Something didn't work, deal a new game
@@ -1061,8 +1064,6 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
             callback()
         }
     }
-
-    class DatabaseInconsistency(msg: String? = null, cause: Throwable? = null): Exception(msg, cause)
 
     companion object {
         // The are keys for bundle values in the state bundle for the view model.

@@ -184,7 +184,7 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
             list.add(Card(0L, shuffled[i], STOCK_GROUP, i - count, Card.FACE_DOWN or Card.HIGHLIGHT_NONE))
             ++i
         }
-        list.add(Card(0L, shuffled[i], STOCK_GROUP, i - count, Card.HIGHLIGHT_NONE))
+        list.add(Card(0L, shuffled[i], STOCK_GROUP, i - count, Card.SPREAD or Card.HIGHLIGHT_NONE))
         ++i
         list.add(Card(0L, shuffled[i], WASTE_GROUP, 0, Card.HIGHLIGHT_NONE))
         return list
@@ -499,7 +499,7 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
                 (2..<wasteSize).forEach {i ->
                     waste.cards[i]?.card?.let { w -> w.changed(generation = generation, group = STOCK_GROUP, position = wasteSize - 1 - w.position, faceDown = true, spread = false) }
                 }
-                waste.cards[1]?.card?.let { w -> w.changed(generation = generation, group = STOCK_GROUP, position = wasteSize - 1 - w.position, faceDown = false, spread = false) }
+                waste.cards[1]?.card?.let { w -> w.changed(generation = generation, group = STOCK_GROUP, position = wasteSize - 1 - w.position, faceDown = false, spread = true) }
             }
         }
     }
@@ -515,10 +515,10 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
 
     private fun playCard(card: Card, group: Int, pos: Int, generation: Long) {
         card.changed(generation = generation, group = group,
-            position = pos, highlight = Card.HIGHLIGHT_NONE, faceDown = false, spread = false)
+            position = pos, highlight = Card.HIGHLIGHT_NONE, faceDown = false, spread = group == WASTE_GROUP)
         if (card.group == STOCK_GROUP && dealer.cards[STOCK_GROUP].cards.size > 1) {
             dealer.cards[STOCK_GROUP].let { it.cards[it.cards.lastIndex - 1]?.card?.changed(generation = generation,
-                highlight = Card.HIGHLIGHT_NONE, faceDown = false, spread = false) }
+                highlight = Card.HIGHLIGHT_NONE, faceDown = false, spread = true) }
         }
     }
 
@@ -570,6 +570,7 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
             // the top card of the stock to the waste
             dealer.withUndo {generation ->
                 if (card.group == STOCK_GROUP) {
+                    dealer.cards[WASTE_GROUP].cards.lastOrNull()?.card?.changed(generation = generation, spread = false)
                     playCard(card, WASTE_GROUP, dealer.cards[WASTE_GROUP].cards.size, generation = generation)
                 } else if (card.group == WASTE_GROUP)
                     wasteToStock(generation)
