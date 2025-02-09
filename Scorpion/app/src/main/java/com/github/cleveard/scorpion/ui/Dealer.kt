@@ -1,6 +1,7 @@
 package com.github.cleveard.scorpion.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.unit.DpSize
 import com.github.cleveard.scorpion.db.Card
 import com.github.cleveard.scorpion.db.StateEntity
@@ -30,6 +31,8 @@ interface Dealer {
     val useSystemTheme: Boolean
     /** The aspect ratio of the card */
     val cardAspect: Float
+    /** Ratio of tray size and card size */
+    val traySizeRatio: Size
     /** The size of the playable area **/
     var playAreaSize: DpSize
     /**

@@ -2,6 +2,7 @@ package com.github.cleveard.scorpion
 
 import android.app.Application
 import android.content.Context
+import android.graphics.drawable.VectorDrawable
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -36,6 +37,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.BlendModeColorFilter
 import androidx.compose.ui.graphics.Color
@@ -126,6 +128,9 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
     /** @inheritDoc */
     override val cardAspect: Float
         get() = MainActivityViewModel.cardAspect
+    /** @inheritDoc */
+    override val traySizeRatio: Size
+        get() = MainActivityViewModel.traySizeRatio
     private val _playAreaSize: MutableState<DpSize> = mutableStateOf(DpSize.Zero)
     /** @inheritDoc */
     override var playAreaSize: DpSize
@@ -1080,6 +1085,7 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
         // The built in card width and height. These are set when the cards are preloaded
         var cardAspect: Float = 234.0f / 333.0f
             private set
+        var traySizeRatio: Size = Size(263.0f / 234.0f, 361.0f / 333.0f)
         // The path the the asset folder
         private const val ASSET_PATH = "file:///android_asset/"
         // The path to the card front assets

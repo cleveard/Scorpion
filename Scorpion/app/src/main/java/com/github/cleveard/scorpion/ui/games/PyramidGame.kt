@@ -1,16 +1,23 @@
 package com.github.cleveard.scorpion.ui.games
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.BlendModeColorFilter
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.coerceAtLeast
@@ -42,6 +49,7 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
     private var playPartialCover: Boolean = state.bundle.getBoolean(PLAY_PARTIAL_COVER, true)
     private var showHighlights: MutableState<Boolean> = mutableStateOf(state.bundle.getBoolean(SHOW_HIGHLIGHTS, true))
     private var cardSize: DpSize = DpSize.Zero
+    private var traySize: DpSize = DpSize.Zero
 
     /** Dialog content for the variant dialog */
     private val variantContent = object: DialogContent {
@@ -191,13 +199,47 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
     }
 
     override fun setupGroups() {
-        // Calculate the card aspect ratio
+        // Get the card aspect ratio
         val aspect = dealer.cardAspect
+        // We solve the formula for the size to get the width that will best fit the
+        // playarea size. I will put this here to remember how these were calculated.
+        // Some notation - pw and ph the playarea width and height. cw and ch the card
+        // image width and height. tw and th the ratio of the tray width and height with
+        // the card width and height. a - the aspect ratio, r the count of rows in the pyramid
+        // p the padding around each card image, s - padding between stock, waste and discard piles
+        // and the pyramid.
+        // The full size of the layout depends on whether we use the landscape or portrait
+        // layout.
+        // The portrait layout puts the stock, waste and discard piles under the pyramid.
+        // So the width is the width of the pyramid, which is (cw + 2p) * r and we solve
+        // r * (cw + 2 * p) = pw
+        // cw + 2 * p = pw / r
+        // cw = pw / r - 2 * p
+        // The height in portrait mode is the height of the pyramid + s + th * ch + 2p and we solve
+        // ch * (r - 1) / 2 + ch + 2 * p + s + th * ch + 2 * p = ph
+        // ch * (r - 1) / 2 + ch + ch * th = ph - s - 4 * p
+        // ch * ((r - 1) / 2 + 1 + th) = ph - s - 4 * p
+        // ch = (ph - s - 4 * p) / ((r - 1) / 2 + 1 + th)
+        // and cw = ch * a
         // The width of cards + padding for portrait layout
         val widthPortrait = ((dealer.playAreaSize.width / ROW_COUNT) - cardPadding * 2)
-            .coerceAtMost((dealer.playAreaSize.height - cardPadding * 4 - stockPadding) * aspect / ((ROW_COUNT + 3) * 0.5f))
+            .coerceAtMost((dealer.playAreaSize.height - cardPadding * 4 - stockPadding) * aspect /
+                ((ROW_COUNT + 1) * 0.5f + dealer.traySizeRatio.height))
+        // The landscape layout puts the stock, waste and discard piles to the right of the pyramid.
+        // So the width is the width of the pyramid, which is (cw + 2p) * r + s + cw * tw + 2 * p
+        // and we solve
+        // (cw + 2p) * r + s + cw * tw + 2 * p = pw
+        // r * cw + r * 2 * p + s + cw * tw + 2 * p = pw
+        // cw * (r + tw) = pw - 2 * p - r * 2 * p - s
+        // cw = (pw - (r + 1) * 2 * p - s) / (r + tw)
+        // The height in landscape mode is the height of the pyramid and we solve
+        // ch * (r - 1) / 2 + ch + 2 * p = ph
+        // ch * (r - 1) / 2 + ch = ph - 2 * p
+        // ch * ((r - 1) / 2 + 1) = ph - 2 * p
+        // ch = (ph - 2 * p) / ((r + 1) / 2)
+        // and cw = ch * a
         // The width of cards + padding for landscape layout
-        val widthLandscape = (((dealer.playAreaSize.width - stockPadding) / (ROW_COUNT + 1)) - cardPadding * 2)
+        val widthLandscape = ((dealer.playAreaSize.width - stockPadding - cardPadding * 2 * (ROW_COUNT + 1)) / (ROW_COUNT + dealer.traySizeRatio.width))
             .coerceAtMost((dealer.playAreaSize.height - cardPadding * 2) * aspect / ((ROW_COUNT + 1) * 0.5f))
         // Choose the layout with the largest width
         val portrait = widthPortrait > widthLandscape
@@ -206,14 +248,15 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
 
         // Set the card size
         cardSize = DpSize(width + cardPadding * 2, width / aspect + cardPadding * 2)
+        traySize = DpSize(width * dealer.traySizeRatio.width + cardPadding * 2, width * dealer.traySizeRatio.height / aspect + cardPadding * 2)
         // Calculate the size of the pyramid without the stock, waste and discard groups
         val pyramidSize = DpSize(cardSize.width * ROW_COUNT, (cardSize.height - cardPadding * 2) * 0.5f * (ROW_COUNT - 1) + cardSize.height)
         // Calculate the full size of the cards in the playable area. Portrait layout puts the stock,
         // waste and discard piles under the pyramid. Landscape puts them to the right of the pyramid
         val fullSize = if (portrait)
-            DpSize(pyramidSize.width, pyramidSize.height + cardSize.height + stockPadding)
+            DpSize(pyramidSize.width, pyramidSize.height + traySize.height + stockPadding)
         else
-            DpSize(pyramidSize.width + cardSize.width + stockPadding, pyramidSize.height)
+            DpSize(pyramidSize.width + traySize.width + stockPadding, pyramidSize.height)
         // The offset of the pyramid to center it in the playable area.
         val pyramidOffset = DpOffset((dealer.playAreaSize.width - fullSize.width) / 2.0f, (dealer.playAreaSize.height - fullSize.height) / 2.0f)
 
@@ -232,39 +275,44 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
         if (portrait) {
             // The stock and waste are put below the pyramid on the left
             // and the discard is below the pyramid on the right
-            val offsetY = pyramidOffset.y + pyramidSize.height + stockPadding
+            val offsetY = pyramidOffset.y + pyramidSize.height + (traySize.height - cardSize.height) / 2 + stockPadding
+            val offsetX = pyramidOffset.x + (traySize.width - cardSize.width) / 2
             dealer.cards[STOCK_GROUP].let {
-                it.offset = DpOffset(pyramidOffset.x, offsetY)
+                it.offset = DpOffset(offsetX, offsetY)
                 // Spacing is 0 to make the group a stack
                 it.spacing = DpSize.Zero
             }
             dealer.cards[WASTE_GROUP].let {
-                it.offset = DpOffset(pyramidOffset.x + cardSize.width + stockPadding, offsetY)
+                it.offset = DpOffset(offsetX + traySize.width + stockPadding, offsetY)
                 // Spacing is 0 to make the group a stack
                 it.spacing = DpSize.Zero
             }
             dealer.cards[DISCARD_GROUP].let {
-                it.offset = DpOffset(pyramidOffset.x + fullSize.width - cardSize.width, offsetY)
+                it.offset = DpOffset(pyramidOffset.x + fullSize.width - traySize.width, offsetY)
                 // Spacing is 0 to make the group a stack
                 it.spacing = DpSize.Zero
             }
         } else {
             // The stock and waste are put below the pyramid on the top-end
             // and the discard is at the bottom-end
-            val endOffsetX = pyramidOffset.x + fullSize.width
-            val stockWidth = cardSize.width * 2.0f + stockPadding
+            val endOffsetX = pyramidOffset.x + fullSize.width - (traySize.width - cardSize.width) / 2
+            val stockWidth = cardSize.width + traySize.width + stockPadding
+            val offsetY = pyramidOffset.y + (traySize.height - cardSize.height) / 2
             dealer.cards[STOCK_GROUP].let {
-                it.offset = DpOffset(x = endOffsetX - stockWidth, y = pyramidOffset.y)
+                it.offset = DpOffset(x = endOffsetX - stockWidth, y = offsetY)
                 // Spacing is 0 to make the group a stack
                 it.spacing = DpSize.Zero
             }
             dealer.cards[WASTE_GROUP].let {
-                it.offset = DpOffset(x = endOffsetX - cardSize.width, y = pyramidOffset.y)
+                it.offset = DpOffset(x = endOffsetX - cardSize.width, y = offsetY)
                 // Spacing is 0 to make the group a stack
                 it.spacing = DpSize.Zero
             }
             dealer.cards[DISCARD_GROUP].let {
-                it.offset = DpOffset(pyramidOffset.x + pyramidSize.width + stockPadding, pyramidOffset.y + pyramidSize.height - cardSize.height)
+                it.offset = DpOffset(
+                    x = endOffsetX - cardSize.width,
+                    y = pyramidOffset.y + pyramidSize.height - cardSize.height - (traySize.height - cardSize.height) / 2
+                )
                 // Spacing is 0 to make the group a stack
                 it.spacing = DpSize.Zero
             }
@@ -272,7 +320,27 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
     }
 
     @Composable
+    private fun Tray(group: CardGroup) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.offset(x = group.offset.x - (traySize.width - cardSize.width) / 2, y = group.offset.y - (traySize.height - cardSize.height) / 2)
+                .size(traySize)
+                .padding(cardPadding)
+        ) {
+            Image(
+                painterResource(R.drawable.card_tray),
+                contentDescription = "",
+                contentScale = ContentScale.Fit
+            )
+        }
+    }
+
+    @Composable
     override fun Content(modifier: Modifier) {
+        Tray(dealer.cards[STOCK_GROUP])
+        Tray(dealer.cards[WASTE_GROUP])
+        Tray(dealer.cards[DISCARD_GROUP])
+
         // Draw each group where it belongs
         for (i in 0..<GROUP_COUNT) {
             dealer.cards[i].Content(
