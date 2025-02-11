@@ -1085,7 +1085,7 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
         // The built in card width and height. These are set when the cards are preloaded
         var cardAspect: Float = 234.0f / 333.0f
             private set
-        var traySizeRatio: Size = Size(263.0f / 234.0f, 361.0f / 333.0f)
+        var traySizeRatio: Size = Size(318.0f / 234.0f, 417.0f / 333.0f)
         // The path the the asset folder
         private const val ASSET_PATH = "file:///android_asset/"
         // The path to the card front assets

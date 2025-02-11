@@ -288,7 +288,7 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
                 it.spacing = DpSize.Zero
             }
             dealer.cards[DISCARD_GROUP].let {
-                it.offset = DpOffset(pyramidOffset.x + fullSize.width - traySize.width, offsetY)
+                it.offset = DpOffset(pyramidOffset.x + fullSize.width - (traySize.width + cardSize.width) / 2, offsetY)
                 // Spacing is 0 to make the group a stack
                 it.spacing = DpSize.Zero
             }
