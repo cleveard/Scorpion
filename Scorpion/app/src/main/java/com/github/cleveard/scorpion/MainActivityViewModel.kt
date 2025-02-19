@@ -264,7 +264,7 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
                 val groupCount = selectedGame.value.second.groupCount
                 // First make sure we have exactly the right number of groups
                 while (cardGroups.size < groupCount)
-                    cardGroups.add(CardGroup())
+                    cardGroups.add(CardGroup(cardGroups.size))
                 while (cardGroups.size > groupCount) {
                     cardGroups.last().cards.clear()
                     cardGroups.removeAt(cardGroups.lastIndex)
@@ -795,7 +795,7 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
 
         // First make sure we have exactly the right number of groups
         while (cardGroups.size < groupCount)
-            cardGroups.add(CardGroup())
+            cardGroups.add(CardGroup(cardGroups.size))
         while (cardGroups.size > groupCount) {
             cardGroups.last().cards.clear()
             cardGroups.removeAt(cardGroups.lastIndex)

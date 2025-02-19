@@ -202,8 +202,8 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
         // Get the card aspect ratio
         val aspect = dealer.cardAspect
         // We solve the formula for the size to get the width that will best fit the
-        // playarea size. I will put this here to remember how these were calculated.
-        // Some notation - pw and ph the playarea width and height. cw and ch the card
+        // play area size. I will put this here to remember how these were calculated.
+        // Some notation - pw and ph the play area width and height. cw and ch the card
         // image width and height. tw and th the ratio of the tray width and height with
         // the card width and height. a - the aspect ratio, r the count of rows in the pyramid
         // p the padding around each card image, s - padding between stock, waste and discard piles
@@ -675,7 +675,7 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
     }
 
     @Composable
-    fun Modifier.clickableCard(drawable: CardDrawable): Modifier {
+    private fun Modifier.clickableCard(drawable: CardDrawable): Modifier {
         // Any card in the pyramid can be clicked, only
         // the top card of the stock and waste groups can be clicked and
         // the discard group cannot be clicked
@@ -703,7 +703,7 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
     }
 
     @Composable
-    fun Modifier.dragAndDropCard(drawable: CardDrawable): Modifier {
+    private fun Modifier.dragAndDropCard(drawable: CardDrawable): Modifier {
         // Any card in the pyramid can be a drag source, only
         // the top card of the stock and waste groups can be a drag source and
         // the discard group cannot be a drag source
@@ -758,27 +758,27 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
     }
 
     companion object {
-        const val ROW_COUNT = 7
-        const val STOCK_GROUP = ROW_COUNT
-        const val WASTE_GROUP = STOCK_GROUP + 1
-        const val DISCARD_GROUP = WASTE_GROUP + 1
-        const val GROUP_COUNT = DISCARD_GROUP + 1
+        private const val ROW_COUNT = 7
+        private const val STOCK_GROUP = ROW_COUNT
+        private const val WASTE_GROUP = STOCK_GROUP + 1
+        private const val DISCARD_GROUP = WASTE_GROUP + 1
+        private const val GROUP_COUNT = DISCARD_GROUP + 1
 
-        const val HIGHLIGHT_SELECTED = 1
-        const val HIGHLIGHT_MATCH = 2
+        private const val HIGHLIGHT_SELECTED = 1
+        private const val HIGHLIGHT_MATCH = 2
 
-        const val MORE_THAN_6 = 1
-        const val LESS_THAN_7 = 2
-        const val SUM_13 = MORE_THAN_6 or LESS_THAN_7
+        private const val MORE_THAN_6 = 1
+        private const val LESS_THAN_7 = 2
+        private const val SUM_13 = MORE_THAN_6 or LESS_THAN_7
 
-        const val STOCK_PASSES = "stock_passes"
-        const val STOCK_PASS_COUNT = "stock_pass_count"
-        const val CLEAR_PYRAMID_ONLY = "clear_pyramid_only"
-        const val PLAY_PARTIAL_COVER = "play_partial_games"
-        const val SHOW_HIGHLIGHTS = "show_highlights"
+        private const val STOCK_PASSES = "stock_passes"
+        private const val STOCK_PASS_COUNT = "stock_pass_count"
+        private const val CLEAR_PYRAMID_ONLY = "clear_pyramid_only"
+        private const val PLAY_PARTIAL_COVER = "play_partial_games"
+        private const val SHOW_HIGHLIGHTS = "show_highlights"
 
-        val selectFilter = BlendModeColorFilter(Color(0x60000000), BlendMode.SrcOver)
-        val matchFilter = BlendModeColorFilter(Color(0x6000FF00), BlendMode.SrcOver)
-        val dropFilter = BlendModeColorFilter(Color(0x600000FF), BlendMode.SrcOver)
+        private val selectFilter = BlendModeColorFilter(Color(0x60000000), BlendMode.SrcOver)
+        private val matchFilter = BlendModeColorFilter(Color(0x6000FF00), BlendMode.SrcOver)
+        private val dropFilter = BlendModeColorFilter(Color(0x600000FF), BlendMode.SrcOver)
     }
 }

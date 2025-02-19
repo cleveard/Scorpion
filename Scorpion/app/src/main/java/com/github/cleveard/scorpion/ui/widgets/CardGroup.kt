@@ -29,7 +29,7 @@ import com.github.cleveard.scorpion.ui.games.Game
  * Composable functions for a card group
  * Card groups can be laid out in columns or rows
  */
-class CardGroup(val pass: Pass = Pass.Main) {
+class CardGroup(val group: Int, val pass: Pass = Pass.Main) {
     private val _offset: MutableState<DpOffset> = mutableStateOf(DpOffset.Zero)
     /** The size of the group */
     var size: DpSize = DpSize.Zero
@@ -164,7 +164,7 @@ class CardGroup(val pass: Pass = Pass.Main) {
         @Composable
         fun Modifier.dragAndDropCard(drawable: CardDrawable, drop: DropCard): Modifier {
             val dragger = remember { CardDragger(drop) }
-            return pointerInput(Unit) {
+            return pointerInput(drawable) {
                 detectDragGestures(
                     onDragStart = {
                         with(dragger) {
@@ -172,15 +172,15 @@ class CardGroup(val pass: Pass = Pass.Main) {
                         }
                     },
                     onDragEnd = {
-                        dragger.end(drawable)
+                        dragger.end()
                     },
                     onDragCancel = {
-                        dragger.cancel(drawable)
+                        dragger.cancel()
                     }
                 ) { change, dragAmount ->
                     change.consume()
                     with(dragger) {
-                        drag(drawable, dragAmount)
+                        drag(dragAmount)
                     }
                 }
             }

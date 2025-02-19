@@ -33,6 +33,9 @@ import com.github.cleveard.scorpion.db.Card
 import com.github.cleveard.scorpion.db.StateEntity
 import com.github.cleveard.scorpion.ui.Dealer
 import com.github.cleveard.scorpion.ui.DialogContent
+import com.github.cleveard.scorpion.ui.widgets.CardDrawable
+import com.github.cleveard.scorpion.ui.widgets.CardGroup
+import com.github.cleveard.scorpion.ui.widgets.DropCard
 import com.github.cleveard.scorpion.ui.widgets.TextSwitch
 import kotlinx.coroutines.launch
 
@@ -405,9 +408,14 @@ class ScorpionGame(
             for (i in 0..<GROUP_COUNT) {
                 dealer.cards[i].Content(
                     this@ScorpionGame,
-                    cardPadding = PaddingValues(padding)
+                    cardPadding = PaddingValues(padding),
+                    gestures = {
+                        dragAndDropCard(it).clickableCard(it)
+                    }
                 )
             }
+
+            DragContent(padding)
         }
     }
 
@@ -497,7 +505,12 @@ class ScorpionGame(
                     // The card is face up. If it is one lower than the selected
                     // card, then try to move it below the selected card
                     val highlight = card.highlight
-                    if (highlight != HIGHLIGHT_ONE_LOWER || !checkAndMove(card, generation)) {
+                    val target = when (highlight) {
+                        HIGHLIGHT_ONE_LOWER -> findOneHigher(card.value)
+                        HIGHLIGHT_ONE_HIGHER -> findOneLower(card.value)
+                        else -> null
+                    }
+                    if (target == null || !checkAndMove(card, target, generation)) {
                         // checkAndMove couldn't move the card, so we highlight the cards
                         // If the highlight is selected, then don't do anything because the
                         // highlights will be removed in withUndo after we return
@@ -530,7 +543,7 @@ class ScorpionGame(
             // Update the database
             withUndo {generation ->
                 // Try to move the card
-                checkAndMove(card, generation)
+                checkAndMove(card, null, generation)
             }
         }
     }
@@ -662,6 +675,77 @@ class ScorpionGame(
         ))
     }
 
+    @Composable
+    private fun Modifier.clickableCard(drawable: CardDrawable): Modifier {
+        // Allow any card to be clicked
+        return with(CardGroup) {
+            clickGestures(drawable, this@ScorpionGame)
+        }
+    }
+
+    fun Card.canPlayOn(target: Card): Boolean {
+        return faceUp && target.faceUp &&
+            target.group < COLUMN_COUNT &&
+            (value % CARDS_PER_SUIT != CARDS_PER_SUIT - 1 &&
+            target.value == value + 1 &&
+            (cheatMoveCard || (group != target.group && target.position == dealer.cards[target.group].cards.lastIndex))) ||
+            (cheatMoveCard && value % CARDS_PER_SUIT != 0 &&
+                target.value == value - 1)
+    }
+
+    @Composable
+    private fun Modifier.dragAndDropCard(drawable: CardDrawable): Modifier {
+        // Any face up card can be dragged
+        if (drawable.card.faceDown)
+            return this
+
+        return with(CardGroup) {
+            dragAndDropCard(drawable, object : DropCard {
+                private var filter: ColorFilter? = null
+                override val cards: List<CardGroup>
+                    get() = dealer.cards
+
+                override fun onStarted(sourceDrawable: CardDrawable, dragDrawables: (List<CardDrawable>) -> List<CardGroup>): List<CardGroup> {
+                    val group = dealer.cards[sourceDrawable.card.group]
+                    val list = if (sourceDrawable.card.group == KITTY_GROUP ||
+                        (sourceDrawable.card.value % CARDS_PER_SUIT == CARDS_PER_SUIT - 1 &&
+                            group.cards.getOrNull(sourceDrawable.card.position + 1)?.let { it.card.value + 1 } != sourceDrawable.card.value) ||
+                        group.cards.getOrNull(sourceDrawable.card.position - 1)?.card?.value?.let { it - 1 } == sourceDrawable.card.value)
+                        listOf(sourceDrawable)
+                    else
+                        ArrayList(group.cards.subList(sourceDrawable.card.position, group.cards.size).filterNotNull())
+                    return dragDrawables(list).also {
+                        startDrag(it)
+                    }
+                }
+
+                override fun onEntered(sourceDrawable: CardDrawable, targetDrawable: CardDrawable) {
+                    filter = targetDrawable.colorFilter
+                    if (sourceDrawable.card.canPlayOn(targetDrawable.card))
+                        targetDrawable.colorFilter = dropFilter
+                }
+
+                override fun onExited(sourceDrawable: CardDrawable, targetDrawable: CardDrawable) {
+                    targetDrawable.colorFilter = filter
+                    filter = null
+                }
+
+                override fun onEnded(sourceDrawable: CardDrawable, targetDrawable: CardDrawable?) {
+                    endDrag()
+                    targetDrawable?.let {
+                        if (sourceDrawable.card.canPlayOn(it.card)) {
+                            dealer.scope.launch {
+                                withUndo { generation ->
+                                    checkAndMove(sourceDrawable.card, it.card, generation)
+                                }
+                            }
+                        }
+                    }
+                }
+            })
+        }
+    }
+
     /**
      * Extra processing of plays by the game
      * @param actions The play to be made
@@ -697,7 +781,7 @@ class ScorpionGame(
      * @param card The card to move
      * @param generation The new generation
      */
-    private fun checkAndMove(card: Card, generation: Long): Boolean {
+    private fun checkAndMove(card: Card, target: Card?, generation: Long): Boolean {
         // We can only move face up cards
         if (card.faceUp) {
             if (card.value % CARDS_PER_SUIT == CARDS_PER_SUIT - 1) {
@@ -733,23 +817,35 @@ class ScorpionGame(
                     }
                 }
             } else {
+                val higher = findOneHigher(card.value)
+                val lower = findOneLower(card.value)
                 // Not a king, so we need to move to the card one higher than this one
-                findOneHigher(card.value)?.let {
+                if (higher != null && (!cheatMoveCard || target != lower)) {
                     // We can only legally move the card if the one higher
                     // is not in the same column, is not in the kitty,
                     // is at the end of column and is faceUp
-                    if (it.group != card.group && it.group != KITTY_GROUP &&
-                        it.position == dealer.cards[it.group].cards.lastIndex && it.faceUp) {
+                    if (higher.group != card.group && higher.group != KITTY_GROUP &&
+                        higher.position == dealer.cards[higher.group].cards.lastIndex && higher.faceUp) {
                         // Move the cards to the end of column
-                        moveCards(card, it.group, -1, generation, card.group == KITTY_GROUP)
+                        moveCards(card, higher.group, -1, generation, card.group == KITTY_GROUP)
                         return true         // We moved something
-                    } else if (cheatMoveCard && it.faceUp) {
+                    } else if (cheatMoveCard && higher.faceUp) {
                         // We are cheating and the target card is face up, so we move
                         // just the one card below the target card
-                        moveCards(card, it.group, it.position + 1, generation, true)
+                        moveCards(card, higher.group, higher.position + 1, generation, true)
                         cheated = true          // We cheated
                         return true             // And moved something
                     }
+                }
+
+                // If we can cheat by moving the card above the lower one
+                // then lets do it
+                if (cheatMoveCard && lower != null && target == lower && lower.faceUp) {
+                    // We are cheating and the target card is face up, so we move
+                    // just the one card above the target card
+                    moveCards(card, lower.group, lower.position, generation, true)
+                    cheated = true          // We cheated
+                    return true             // And moved something
                 }
             }
         }
@@ -901,5 +997,6 @@ class ScorpionGame(
             BlendModeColorFilter(Color(0x6000FF00), BlendMode.SrcOver),
             BlendModeColorFilter(Color(0x60FF0000), BlendMode.SrcOver)
         )
+        private val dropFilter = BlendModeColorFilter(Color(0x600000FF), BlendMode.SrcOver)
     }
 }

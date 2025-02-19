@@ -43,6 +43,8 @@ interface DropCard {
 class CardDragger(private val drop: DropCard) {
     /** List of groups used to drag cards */
     private var list = listOf<CardGroup>()
+    /** First drawable in drag list */
+    private var first: CardDrawable? = null
     /** Position of the pointer in the playable area during a drag */
     private var position = DpOffset.Zero
     /** The last card the pointer was over */
@@ -56,6 +58,7 @@ class CardDragger(private val drop: DropCard) {
     fun Density.start(drawable: CardDrawable, offset: Offset) {
         // Get the list of cards we will be dragging
         list = drop.onStarted(drawable) {drag ->
+            first = drag.first()
             // Put the drawables in drag in groups and
             // return the list of groups
             sortedMapOf<Int, CardGroup>().let {
@@ -80,10 +83,9 @@ class CardDragger(private val drop: DropCard) {
 
     /**
      * Drag the drawables
-     * @param drawable The drawable being dragged
      * @param dragAmount The drag change in pixels
      */
-    fun Density.drag(drawable: CardDrawable, dragAmount: Offset) {
+    fun Density.drag(dragAmount: Offset) {
         // Convert drag pixels to Dp
         val dragDp = DpOffset(dragAmount.x.toDp(), dragAmount.y.toDp())
         // Move each group by the offset
@@ -97,11 +99,11 @@ class CardDragger(private val drop: DropCard) {
             // Finger hit test changed
             if (temp != null) {
                 // Exit the previous card
-                drop.onExited(drawable, temp)
+                drop.onExited(first!!, temp)
             }
             if (card != null) {
                 // Enter the current card
-                drop.onEntered(drawable, card)
+                drop.onEntered(first!!, card)
             }
             // Remember the hitTest result
             over = card
@@ -110,29 +112,27 @@ class CardDragger(private val drop: DropCard) {
 
     /**
      * Drag is finished
-     * @param drawable The drawable being dragged
      */
-    fun end(drawable: CardDrawable) {
+    fun end() {
         // Let the game know the drag ended and where the pointer was
-        over?.let { drop.onExited(drawable, it) }
-        drop.onEnded(drawable, over)
+        over?.let { drop.onExited(first!!, it) }
+        drop.onEnded(first!!, over)
     }
 
     /**
      * Drag is finished
-     * @param drawable The drawable being dragged
      */
-    fun cancel(drawable: CardDrawable) {
-        over?.let { drop.onExited(drawable, it) }
+    fun cancel() {
+        over?.let { drop.onExited(first!!, it) }
         // Let the game know the drag ended without a drop
-        drop.onEnded(drawable, null)
+        drop.onEnded(first!!, null)
     }
 
     /**
      * Create a new group for dragging.
      */
     private fun newGroup(group: CardGroup): CardGroup {
-        return CardGroup(CardGroup.Pass.Drag).apply {
+        return CardGroup(-1, CardGroup.Pass.Drag).apply {
             offset = group.offset
             size = group.size
             spacing = group.spacing
