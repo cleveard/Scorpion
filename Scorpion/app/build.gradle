@@ -14,11 +14,10 @@ android {
         applicationId "com.github.cleveard.scorpion"
         minSdk 29
         targetSdk 34
-        versionCode 1
         versionName "1.0"
-        versionCode 3
+        versionCode 4
         versionName "1.0"
-        versionNameSuffix ".alpha3"
+        versionNameSuffix ".alpha4"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
