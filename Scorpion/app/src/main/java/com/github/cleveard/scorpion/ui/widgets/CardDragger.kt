@@ -13,10 +13,21 @@ interface DropCard {
     /** List of card groups */
     val cards: List<CardGroup>
 
+    /** Convert a coordinate in the play area to a coordinate in the game */
+    fun toGame(offset: DpOffset): DpOffset = offset
+
+    /** Convert a coordinate in the game to a coordinate in the play area */
+    fun toPlayArea(offset: DpOffset): DpOffset = offset
+
     /**
      * A drag and drop session has just been started.
      */
     fun onStarted(sourceDrawable: CardDrawable, dragDrawables: (List<CardDrawable>) -> List<CardGroup>): List<CardGroup>
+
+    /**
+     * Report a drag event at an offset
+     */
+    fun onDrag(sourceDrawable: CardDrawable, offset: DpOffset) = Unit
 
     /**
      * An item being dropped has entered into the bounds of this [DragAndDropTarget].
@@ -57,7 +68,7 @@ class CardDragger(private val drop: DropCard) {
      */
     fun Density.start(drawable: CardDrawable, offset: Offset) {
         // Get the list of cards we will be dragging
-        list = drop.onStarted(drawable) {drag ->
+        list = drop.onStarted(drawable) { drag ->
             first = drag.first()
             // Put the drawables in drag in groups and
             // return the list of groups
@@ -75,8 +86,8 @@ class CardDragger(private val drop: DropCard) {
         }
         // Calculate the position of the finger in the playable area
         // The offset is in pixels and needs to be converted to Dp
-        position = drawable.offset + drop.cards[drawable.card.group].offset +
-            DpOffset(offset.x.toDp(), offset.y.toDp())
+        position = drop.toPlayArea(drawable.offset + drop.cards[drawable.card.group].offset +
+            DpOffset(offset.x.toDp(), offset.y.toDp()))
         // We start not over anything
         over = null
     }
@@ -92,8 +103,10 @@ class CardDragger(private val drop: DropCard) {
         list.forEach { it.offset += dragDp }
         // Move the pointer position by the offset
         position += dragDp
+        // Report drag event
+        drop.onDrag(first!!, position)
         // Hit test the pointer position
-        val card = drop.cards.hitTest(position)
+        val card = drop.cards.hitTest(drop.toGame(position))
         val temp = over
         if (temp != card) {
             // Finger hit test changed
@@ -133,7 +146,7 @@ class CardDragger(private val drop: DropCard) {
      */
     private fun newGroup(group: CardGroup): CardGroup {
         return CardGroup(-1, CardGroup.Pass.Drag).apply {
-            offset = group.offset
+            offset = drop.toPlayArea(group.offset)
             size = group.size
             spacing = group.spacing
         }

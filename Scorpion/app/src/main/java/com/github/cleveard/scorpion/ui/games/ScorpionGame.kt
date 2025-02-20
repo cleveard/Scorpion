@@ -1,7 +1,6 @@
 package com.github.cleveard.scorpion.ui.games
 
 import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.rememberScrollableState
 import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -26,7 +25,6 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.coerceAtLeast
-import androidx.compose.ui.unit.coerceAtMost
 import androidx.compose.ui.unit.dp
 import com.github.cleveard.scorpion.R
 import com.github.cleveard.scorpion.db.Card
@@ -36,6 +34,7 @@ import com.github.cleveard.scorpion.ui.DialogContent
 import com.github.cleveard.scorpion.ui.widgets.CardDrawable
 import com.github.cleveard.scorpion.ui.widgets.CardGroup
 import com.github.cleveard.scorpion.ui.widgets.DropCard
+import com.github.cleveard.scorpion.ui.widgets.Scroller
 import com.github.cleveard.scorpion.ui.widgets.TextSwitch
 import kotlinx.coroutines.launch
 
@@ -115,6 +114,13 @@ class ScorpionGame(
     private var cardSize: DpSize = DpSize.Zero
     private val fullSize: MutableState<DpSize> = mutableStateOf(DpSize.Zero)
     private val scrollOffset: MutableState<Dp> = mutableStateOf(0.dp)
+    private val scroller: Scroller = object: Scroller() {
+        override val limits: Pair<Dp, Dp>
+            get() = Pair(dealer.playAreaSize.height - fullSize.value.height, 0.dp)
+        override var value: Dp
+            get() = scrollOffset.value
+            set(value) {scrollOffset.value = value}
+    }
 
     /** Dialog content for the variant dialog */
     private val variantContent = object: DialogContent {
@@ -372,37 +378,7 @@ class ScorpionGame(
                 // The scroll logic
                 .scrollable(
                     orientation = Orientation.Vertical,
-                    state = rememberScrollableState {
-                        if (fullSize.value.height <= dealer.playAreaSize.height) {
-                            scrollOffset.value = 0.dp
-                            it
-                        } else {
-                            // Calculate the next scroll offset
-                            val next = scrollOffset.value + it.dp
-                            // If it is > 0, then we will scroll down too far
-                            if (next.value > 0.0f) {
-                                // The amount of scroll we use is how far the scroll
-                                // offset is below 0
-                                -scrollOffset.value.value.also {
-                                    // The new scrollOffset is 0
-                                    scrollOffset.value = 0.dp
-                                }
-                            } else if (next + fullSize.value.height < dealer.playAreaSize.height) {
-                                // We will scroll up to far. The amount of scroll used is the amount
-                                // required to move the bottom of the content to the bottom of the
-                                // playable area.
-                                (dealer.playAreaSize.height.value - scrollOffset.value.value - fullSize.value.height.value).also {
-                                    // The new scroll offset puts the bottom of the content to the bottom of the playable area
-                                    scrollOffset.value = dealer.playAreaSize.height - fullSize.value.height
-                                }
-                            } else {
-                                // Scroll and use all of the scroll delta
-                                scrollOffset.value += it.dp
-                                it
-                            }
-                        }
-                    }
-                )
+                    state = scroller.rememberScrollableState())
         ) {
             // Draw the groups in the playable area
             for (i in 0..<GROUP_COUNT) {
@@ -414,9 +390,9 @@ class ScorpionGame(
                     }
                 )
             }
-
-            DragContent(padding)
         }
+
+        DragContent(padding)
     }
 
     /** @inheritDoc */
@@ -452,9 +428,7 @@ class ScorpionGame(
         }
         // Adjust the scroll offset if the content size shrinks
         fullSize.value = DpSize(fullSize.value.width, dealer.cards.maxOf { it.offset.y + it.size.height })
-        if (fullSize.value.height + scrollOffset.value < dealer.playAreaSize.height) {
-            scrollOffset.value = (dealer.playAreaSize.height - fullSize.value.height).coerceAtMost(0.dp)
-        }
+        scroller.update()
     }
 
     /** @inheritDoc */
@@ -705,6 +679,10 @@ class ScorpionGame(
                 override val cards: List<CardGroup>
                     get() = dealer.cards
 
+                override fun toGame(offset: DpOffset): DpOffset = DpOffset(offset.x, offset.y - scrollOffset.value)
+
+                override fun toPlayArea(offset: DpOffset): DpOffset = DpOffset(offset.x, offset.y + scrollOffset.value)
+
                 override fun onStarted(sourceDrawable: CardDrawable, dragDrawables: (List<CardDrawable>) -> List<CardGroup>): List<CardGroup> {
                     val group = dealer.cards[sourceDrawable.card.group]
                     val list = if (sourceDrawable.card.group == KITTY_GROUP ||
@@ -716,6 +694,16 @@ class ScorpionGame(
                         ArrayList(group.cards.subList(sourceDrawable.card.position, group.cards.size).filterNotNull())
                     return dragDrawables(list).also {
                         startDrag(it)
+                    }
+                }
+
+                override fun onDrag(sourceDrawable: CardDrawable, offset: DpOffset) {
+                    val autoScroll = (dealer.playAreaSize.height.value * 0.2f).coerceAtLeast(80.0f)
+                    when {
+                        offset.y.value < autoScroll -> scroller.autoScroll((autoScroll - offset.y.value) * 2.0f)
+                        offset.y.value > dealer.playAreaSize.height.value - autoScroll ->
+                            scroller.autoScroll((dealer.playAreaSize.height.value - autoScroll - offset.y.value) * 2.0f)
+                        else -> scroller.autoScroll(0.0f)
                     }
                 }
 
@@ -732,6 +720,7 @@ class ScorpionGame(
 
                 override fun onEnded(sourceDrawable: CardDrawable, targetDrawable: CardDrawable?) {
                     endDrag()
+                    scroller.autoScroll(0.0f)
                     targetDrawable?.let {
                         if (sourceDrawable.card.canPlayOn(it.card)) {
                             dealer.scope.launch {
