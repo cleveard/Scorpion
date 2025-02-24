@@ -32,19 +32,19 @@ interface DropCard {
     /**
      * An item being dropped has entered into the bounds of this [DragAndDropTarget].
      */
-    fun onEntered(sourceDrawable: CardDrawable, targetDrawable: CardDrawable) = Unit
+    fun onEntered(sourceDrawable: CardDrawable, targetDrawable: Any): Boolean = true
 
     /**
      * An item being dropped has moved outside the bounds of this [DragAndDropTarget].
      */
-    fun onExited(sourceDrawable: CardDrawable, targetDrawable: CardDrawable) = Unit
+    fun onExited(sourceDrawable: CardDrawable, targetDrawable: Any) = Unit
 
     /**
      * The drag and drop session has been completed. All [DragAndDropTarget] instances in the
      * hierarchy that previously received an [onStarted] event will receive this event. This gives
      * an opportunity to reset the state for a [DragAndDropTarget].
      */
-    fun onEnded(sourceDrawable: CardDrawable, targetDrawable: CardDrawable?) = Unit
+    fun onEnded(sourceDrawable: CardDrawable, targetDrawable: Any?) = Unit
 }
 
 /**
@@ -59,7 +59,7 @@ class CardDragger(private val drop: DropCard) {
     /** Position of the pointer in the playable area during a drag */
     private var position = DpOffset.Zero
     /** The last card the pointer was over */
-    private var over: CardDrawable? = null
+    private var over: Any? = null
 
     /**
      * Start dragging
@@ -106,21 +106,7 @@ class CardDragger(private val drop: DropCard) {
         // Report drag event
         drop.onDrag(first!!, position)
         // Hit test the pointer position
-        val card = drop.cards.hitTest(drop.toGame(position))
-        val temp = over
-        if (temp != card) {
-            // Finger hit test changed
-            if (temp != null) {
-                // Exit the previous card
-                drop.onExited(first!!, temp)
-            }
-            if (card != null) {
-                // Enter the current card
-                drop.onEntered(first!!, card)
-            }
-            // Remember the hitTest result
-            over = card
-        }
+        drop.cards.hitTest(drop.toGame(position))
     }
 
     /**
@@ -152,12 +138,31 @@ class CardDragger(private val drop: DropCard) {
         }
     }
 
+    private fun enterAndExit(drawable: Any): Boolean {
+        // Found a card
+        val temp = over
+        return if (temp != drawable) {
+            // Finger hit test changed
+            if (temp != null) {
+                // Exit the previous card
+                drop.onExited(this@CardDragger.first!!, temp)
+            }
+            // Enter the current card
+            drop.onEntered(this@CardDragger.first!!, drawable).also {
+                // Remember the hitTest result
+                if (!it)
+                    over = drawable
+            }
+        } else
+            false
+    }
+
     /**
      * Find the card under position
      * @param position The position to check
      * @return The card or null if we are not over a card
      */
-    private fun List<CardGroup>.hitTest(position: DpOffset): CardDrawable? {
+    private fun List<CardGroup>.hitTest(position: DpOffset) {
         // Find a group we are over
         for (i in this.lastIndex downTo 0) {
             val g = this[i]
@@ -165,12 +170,12 @@ class CardDragger(private val drop: DropCard) {
             if (groupDelta.x >= 0.dp && groupDelta.y >= 0.dp && groupDelta.x < g.size.width && groupDelta.y < g.size.height) {
                 // Found a group find the card in the group
                 for (j in g.cards.lastIndex downTo 0) {
-                    g.cards[j]?.let {d ->
+                    g.cards[j]?.let { d ->
                         if (d.pass == CardGroup.Pass.Main && d.card.faceUp) {
                             val cardDelta = groupDelta - d.offset
                             if (cardDelta.x >= 0.dp && cardDelta.y >= 0.dp && cardDelta.x < d.size.width && cardDelta.y < d.size.height) {
-                                // Found a card
-                                return d
+                                if (!enterAndExit(d))
+                                    return
                             }
                         }
                     }
@@ -178,6 +183,14 @@ class CardDragger(private val drop: DropCard) {
             }
         }
 
-        return null
+        // Find a group we are over
+        for (i in this.lastIndex downTo 0) {
+            val g = this[i]
+            val groupDelta = position - g.offset
+            if (g.cards.isEmpty() && groupDelta.x >= 0.dp && groupDelta.y >= 0.dp && groupDelta.x < g.size.width && groupDelta.y < g.size.height) {
+                if (!enterAndExit(g))
+                    return
+            }
+        }
     }
 }

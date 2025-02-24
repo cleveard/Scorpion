@@ -667,6 +667,10 @@ class ScorpionGame(
                 target.value == value - 1)
     }
 
+    fun Card.canPlayOn(group: Int): Boolean {
+        return value % CARDS_PER_SUIT == CARDS_PER_SUIT - 1 && group < COLUMN_COUNT
+    }
+
     @Composable
     private fun Modifier.dragAndDropCard(drawable: CardDrawable): Modifier {
         // Any face up card can be dragged
@@ -676,6 +680,7 @@ class ScorpionGame(
         return with(CardGroup) {
             dragAndDropCard(drawable, object : DropCard {
                 private var filter: ColorFilter? = null
+                private var color: Color = Color(0)
                 override val cards: List<CardGroup>
                     get() = dealer.cards
 
@@ -707,25 +712,49 @@ class ScorpionGame(
                     }
                 }
 
-                override fun onEntered(sourceDrawable: CardDrawable, targetDrawable: CardDrawable) {
-                    filter = targetDrawable.colorFilter
-                    if (sourceDrawable.card.canPlayOn(targetDrawable.card))
-                        targetDrawable.colorFilter = dropFilter
+                override fun onEntered(sourceDrawable: CardDrawable, targetDrawable: Any): Boolean {
+                    if (targetDrawable is CardDrawable) {
+                        filter = targetDrawable.colorFilter
+                        if (sourceDrawable.card.canPlayOn(targetDrawable.card))
+                            targetDrawable.colorFilter = dropFilter
+                    } else if (targetDrawable is CardGroup) {
+                        color = targetDrawable.emptyBackground.value
+                        if (sourceDrawable.card.canPlayOn(targetDrawable.group))
+                            targetDrawable.emptyBackground.value = dropColor
+                    }
+                    return false
                 }
 
-                override fun onExited(sourceDrawable: CardDrawable, targetDrawable: CardDrawable) {
-                    targetDrawable.colorFilter = filter
+                override fun onExited(sourceDrawable: CardDrawable, targetDrawable: Any) {
+                    if (targetDrawable is CardDrawable)
+                        targetDrawable.colorFilter = filter
+                    else if (targetDrawable is CardGroup)
+                        targetDrawable.emptyBackground.value = color
                     filter = null
+                    color = Color(0)
                 }
 
-                override fun onEnded(sourceDrawable: CardDrawable, targetDrawable: CardDrawable?) {
+                override fun onEnded(sourceDrawable: CardDrawable, targetDrawable: Any?) {
                     endDrag()
                     scroller.autoScroll(0.0f)
                     targetDrawable?.let {
-                        if (sourceDrawable.card.canPlayOn(it.card)) {
-                            dealer.scope.launch {
-                                withUndo { generation ->
-                                    checkAndMove(sourceDrawable.card, it.card, generation)
+                        if (it is CardDrawable) {
+                            if (sourceDrawable.card.canPlayOn(it.card)) {
+                                dealer.scope.launch {
+                                    withUndo { generation ->
+                                        checkAndMove(sourceDrawable.card, it.card, generation)
+                                    }
+                                }
+                            }
+                        } else if (it is CardGroup) {
+                            if (sourceDrawable.card.canPlayOn(it.group)) {
+                                dealer.scope.launch {
+                                    withUndo { generation ->
+                                        val moveAlone = sourceDrawable.card.group == KITTY_GROUP ||
+                                            (kingMovesAlone && sourceDrawable.card.position < dealer.cards[sourceDrawable.card.group].cards.lastIndex &&
+                                                dealer.cards[sourceDrawable.card.group].cards[sourceDrawable.card.position + 1]!!.card.value != sourceDrawable.card.value - 1)
+                                        moveCards(sourceDrawable.card, it.group, it.cards.size, generation, moveAlone)
+                                    }
                                 }
                             }
                         }
@@ -986,6 +1015,7 @@ class ScorpionGame(
             BlendModeColorFilter(Color(0x6000FF00), BlendMode.SrcOver),
             BlendModeColorFilter(Color(0x60FF0000), BlendMode.SrcOver)
         )
-        private val dropFilter = BlendModeColorFilter(Color(0x600000FF), BlendMode.SrcOver)
+        private val dropColor = Color(0x600000FF)
+        private val dropFilter = BlendModeColorFilter(dropColor, BlendMode.SrcOver)
     }
 }

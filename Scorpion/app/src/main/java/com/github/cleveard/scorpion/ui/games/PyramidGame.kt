@@ -702,6 +702,13 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
             0
     }
 
+    private fun dropCardCount(drag: CardDrawable, drop: CardGroup): Int {
+        return if (drag.card.value % CARDS_PER_SUIT == CARDS_PER_SUIT - 1 && drag.card.playable() != null && drop.group == DISCARD_GROUP)
+            1
+        else
+            0
+    }
+
     @Composable
     private fun Modifier.dragAndDropCard(drawable: CardDrawable): Modifier {
         // Any card in the pyramid can be a drag source, only
@@ -718,6 +725,7 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
         return with(CardGroup) {
             dragAndDropCard(drawable, object : DropCard {
                 private var filter: ColorFilter? = null
+                private var color: Color = Color(0)
                 override val cards: List<CardGroup>
                     get() = dealer.cards
 
@@ -727,27 +735,52 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
                     }
                 }
 
-                override fun onEntered(sourceDrawable: CardDrawable, targetDrawable: CardDrawable) {
-                    filter = targetDrawable.colorFilter
-                    if (dropCardCount(sourceDrawable, targetDrawable) > 0)
-                        targetDrawable.colorFilter = dropFilter
+                override fun onEntered(sourceDrawable: CardDrawable, targetDrawable: Any): Boolean {
+                    if (targetDrawable is CardDrawable) {
+                        filter = targetDrawable.colorFilter
+                        if (dropCardCount(sourceDrawable, targetDrawable) > 0)
+                            targetDrawable.colorFilter = dropFilter
+                        return false
+                    } else if (targetDrawable is CardGroup) {
+                        color = targetDrawable.emptyBackground.value
+                        if (dropCardCount(sourceDrawable, targetDrawable) > 0) {
+                            targetDrawable.emptyBackground.value = dropColor
+                            return false
+                        }
+                    }
+                    return true
                 }
 
-                override fun onExited(sourceDrawable: CardDrawable, targetDrawable: CardDrawable) {
-                    targetDrawable.colorFilter = filter
+                override fun onExited(sourceDrawable: CardDrawable, targetDrawable: Any) {
+                    if (targetDrawable is CardDrawable)
+                        targetDrawable.colorFilter = filter
+                    else if (targetDrawable is CardGroup)
+                        targetDrawable.emptyBackground.value = color
                     filter = null
+                    color = Color(0)
                 }
 
-                override fun onEnded(sourceDrawable: CardDrawable, targetDrawable: CardDrawable?) {
+                override fun onEnded(sourceDrawable: CardDrawable, targetDrawable: Any?) {
                     endDrag()
                     targetDrawable?.also { dropOn ->
-                        val count = dropCardCount(sourceDrawable, dropOn)
-                        if (count > 0) {
-                            dealer.scope.launch {
-                                dealer.withUndo { generation ->
-                                    playCard(sourceDrawable.card, DISCARD_GROUP, dealer.cards[DISCARD_GROUP].cards.size, generation)
-                                    if (count > 1)
-                                        playCard(targetDrawable.card, DISCARD_GROUP, dealer.cards[DISCARD_GROUP].cards.size + 1, generation)
+                        if (dropOn is CardDrawable) {
+                            val count = dropCardCount(sourceDrawable, dropOn)
+                            if (count > 0) {
+                                dealer.scope.launch {
+                                    dealer.withUndo { generation ->
+                                        playCard(sourceDrawable.card, DISCARD_GROUP, dealer.cards[DISCARD_GROUP].cards.size, generation)
+                                        if (count > 1)
+                                            playCard(dropOn.card, DISCARD_GROUP, dealer.cards[DISCARD_GROUP].cards.size + 1, generation)
+                                    }
+                                }
+                            }
+                        } else if (dropOn is CardGroup) {
+                            val count = dropCardCount(sourceDrawable, dropOn)
+                            if (count > 0) {
+                                dealer.scope.launch {
+                                    dealer.withUndo { generation ->
+                                        playCard(sourceDrawable.card, DISCARD_GROUP, dealer.cards[DISCARD_GROUP].cards.size, generation)
+                                    }
                                 }
                             }
                         }
@@ -779,6 +812,7 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
 
         private val selectFilter = BlendModeColorFilter(Color(0x60000000), BlendMode.SrcOver)
         private val matchFilter = BlendModeColorFilter(Color(0x6000FF00), BlendMode.SrcOver)
-        private val dropFilter = BlendModeColorFilter(Color(0x600000FF), BlendMode.SrcOver)
+        private val dropColor = Color(0x600000FF)
+        private val dropFilter = BlendModeColorFilter(dropColor, BlendMode.SrcOver)
     }
 }

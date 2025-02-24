@@ -1,6 +1,7 @@
 package com.github.cleveard.scorpion.ui.widgets
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
@@ -16,6 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.DpOffset
@@ -37,6 +39,7 @@ class CardGroup(val group: Int, val pass: Pass = Pass.Main) {
     var spacing: DpSize = DpSize.Zero
     /** The drawables of cards in the group */
     val cards: SnapshotStateList<CardDrawable?> = mutableStateListOf()
+    val emptyBackground: MutableState<Color> = mutableStateOf(Color(0))
 
     /** The offset of the group in the playable area */
     var offset: DpOffset
@@ -78,15 +81,30 @@ class CardGroup(val group: Int, val pass: Pass = Pass.Main) {
             clickGestures(it, game)
         }
     ) {
-        // Add all of the cards to the row
-        for (i in cards.indices) {
-            // Add the card image
-            GetImage(
-                i,
-                modifier = modifier,
-                cardPadding = cardPadding,
-                gestures = gestures
-            )
+        if (cards.isEmpty()) {
+            Box(
+                // Align image in center of box
+                contentAlignment = Alignment.Center,
+                // Set the box offset
+                modifier = modifier.offset(offset.x, offset.y)
+                    .background(emptyBackground.value)
+                    // Set box size
+                    .size(size)
+                    // Set the card padding
+                    .padding(cardPadding)
+            ) {}
+
+        } else {
+            // Add all of the cards to the row
+            for (i in cards.indices) {
+                // Add the card image
+                GetImage(
+                    i,
+                    modifier = modifier,
+                    cardPadding = cardPadding,
+                    gestures = gestures
+                )
+            }
         }
     }
 
