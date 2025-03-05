@@ -138,7 +138,7 @@ class CardDragger(private val drop: DropCard) {
         }
     }
 
-    private fun enterAndExit(drawable: Any): Boolean {
+    private fun enterAndExit(drawable: Any?): Boolean {
         // Found a card
         val temp = over
         return if (temp != drawable) {
@@ -148,11 +148,13 @@ class CardDragger(private val drop: DropCard) {
                 drop.onExited(this@CardDragger.first!!, temp)
             }
             // Enter the current card
-            drop.onEntered(this@CardDragger.first!!, drawable).also {
-                // Remember the hitTest result
-                if (!it)
-                    over = drawable
-            }
+            drawable?.let {d ->
+                drop.onEntered(this@CardDragger.first!!, d).also {
+                    // Remember the hitTest result
+                    if (!it)
+                        over = drawable
+                }
+            } ?: false.also { over = null }
         } else
             false
     }
@@ -192,5 +194,7 @@ class CardDragger(private val drop: DropCard) {
                     return
             }
         }
+
+        enterAndExit(null)
     }
 }
