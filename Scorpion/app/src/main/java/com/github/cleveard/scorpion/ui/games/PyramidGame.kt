@@ -1,5 +1,6 @@
 package com.github.cleveard.scorpion.ui.games
 
+import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -496,6 +497,9 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
         val stock = dealer.cards[STOCK_GROUP]
         val waste = dealer.cards[WASTE_GROUP]
 
+        waste.cards.forEach {
+            Log.d("PYRAMIDWASTE", "Card=$it")
+        }
         // If there are cards in the stock, the game isn't over
         if (stock.cards.isNotEmpty())
             return
@@ -584,8 +588,8 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
     private fun playCard(card: Card, group: Int, pos: Int, generation: Long) {
         card.changed(generation = generation, group = group,
             position = pos, highlight = Card.HIGHLIGHT_NONE, faceDown = false, spread = group == WASTE_GROUP)
-        if (card.group == STOCK_GROUP && dealer.cards[STOCK_GROUP].cards.size > 1) {
-            dealer.cards[STOCK_GROUP].let { it.cards[it.cards.lastIndex - 1]?.card?.changed(generation = generation,
+        if ((card.group == STOCK_GROUP || card.group == WASTE_GROUP) && dealer.cards[card.group].cards.size > 1) {
+            dealer.cards[card.group].let { it.cards[it.cards.lastIndex - 1]?.card?.changed(generation = generation,
                 highlight = Card.HIGHLIGHT_NONE, faceDown = false, spread = true) }
         }
     }
