@@ -658,6 +658,7 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
                 previousHighlight.clear()
                 previousHighlight.clear()
                 changedCards.clear()
+                previousCards.clear()
                 // If the transaction failed, reset the game from the database
                 if (!success) {
                     // Something went wrong
