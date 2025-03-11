@@ -1,6 +1,5 @@
 package com.github.cleveard.scorpion.ui.games
 
-import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -188,14 +187,9 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
             for (position in 0 until group + 1)
                 list.add(Card(0L, shuffled[i++], group, position, Card.SPREAD))
         }
-        val count = i
-        while (i < shuffled.lastIndex - 1) {
-            list.add(Card(0L, shuffled[i], STOCK_GROUP, i - count, Card.FACE_DOWN or Card.HIGHLIGHT_NONE))
-            ++i
+        for (j in i ..< shuffled.size) {
+            list.add(Card(0L, shuffled[j], STOCK_GROUP, j - i, Card.FACE_DOWN or Card.HIGHLIGHT_NONE))
         }
-        list.add(Card(0L, shuffled[i], STOCK_GROUP, i - count, Card.SPREAD or Card.HIGHLIGHT_NONE))
-        ++i
-        list.add(Card(0L, shuffled[i], WASTE_GROUP, 0, Card.HIGHLIGHT_NONE))
         return list
     }
 
@@ -465,12 +459,19 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
         // These two cards can be played only if the playCard
         // is the only card that covers the notPlayCard
         // First is the playCard in the group below the notPlayCard
-        return notPlayCard.group + 1 == playCard.group &&
-            notPlayCard.position.let {pos ->
+        return playCard.partialCover(notPlayCard)
+    }
+
+    private fun Card.partialCover(covered: Card): Boolean {
+        // These two cards can be played only if the playCard
+        // is the only card that covers the notPlayCard
+        // First is the playCard in the group below the notPlayCard
+        return covered.group + 1 == group &&
+            covered.position.let { pos ->
                 // Either playCard is at position and the card at position + 1 is null
-                (pos == playCard.position && dealer.cards[playCard.group].cards.getOrNull(playCard.position + 1) == null) ||
+                (pos == position && dealer.cards[group].cards.getOrNull(position + 1) == null) ||
                     // or playCard is at position + 1 and the card at position is null
-                    (pos + 1 == playCard.position && dealer.cards[playCard.group].cards[playCard.position - 1] == null)
+                    (pos + 1 == position && dealer.cards[group].cards[position - 1] == null)
             }
     }
 
@@ -486,23 +487,20 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
             // If it is 7 or more put it in the slot that matches the sum
                 (sum13[CARDS_PER_SUIT - value] or MORE_THAN_6).let { sum13[CARDS_PER_SUIT - value] = it; it == SUM_13 }
         }
-        
+
+        val stock = dealer.cards[STOCK_GROUP]
+        val waste = dealer.cards[WASTE_GROUP]
+
+        // If there are cards in the stock, the game isn't over
+        if (stock.cards.isNotEmpty())
+            return
+
         // If clearing the pyramid is a win and it is clear, then let the user know
         // This relies on the dealer to empty groups with no cards in them
         if (dealer.cards[0].cards.isEmpty() && clearPyramidOnly) {
             dealer.showNewGameOrDismissAlert(R.string.game_won, R.string.congratulations)
             return
         }
-
-        val stock = dealer.cards[STOCK_GROUP]
-        val waste = dealer.cards[WASTE_GROUP]
-
-        waste.cards.forEach {
-            Log.d("PYRAMIDWASTE", "Card=$it")
-        }
-        // If there are cards in the stock, the game isn't over
-        if (stock.cards.isNotEmpty())
-            return
 
         // Array of ways to sum cards to 13
         val sum13 = IntArray((CARDS_PER_SUIT + 1) / 2)
@@ -525,21 +523,16 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
         // Now look for partially covered plays
         if (playPartialCover) {
             playableCards.values.forEach { card ->
-                if (card.group > 0) {
-                    val group = dealer.cards[card.group].cards
-                    // First check the card covered on the right side
-                    if (card.position < group.lastIndex && group[card.position] == null) {
-                        // Calculate sum
-                        val sum = dealer.cards[card.group - 1].cards[card.position]!!.card.value + card.value
-                        if (sum % CARDS_PER_SUIT == CARDS_PER_SUIT - 1)
-                            return              // Sum to 13 - game not over
+                dealer.cards.getOrNull(card.group - 1)?.cards?.let { group ->
+                    // First check the card covered on the right side.
+                    group.getOrNull(card.position)?.card?.let {
+                        if ((it.value + card.value) % CARDS_PER_SUIT == CARDS_PER_SUIT - 2 && card.partialCover(it))
+                            return
                     }
                     // Next check the card covered on the left side
-                    if (card.position > 0 && group[card.position - 1] == null) {
-                        // Calculate sum
-                        val sum = dealer.cards[card.group - 1].cards[card.position - 1]!!.card.value + card.value
-                        if (sum % CARDS_PER_SUIT == CARDS_PER_SUIT - 2)
-                            return              // Sum to 13 - game not over
+                    group.getOrNull(card.position - 1)?.card?.let {
+                        if ((it.value + card.value) % CARDS_PER_SUIT == CARDS_PER_SUIT - 2 && card.partialCover(it))
+                            return
                     }
                 }
             }
@@ -561,17 +554,18 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
 
     private fun wasteToStock(generation: Long): Boolean {
         val waste = dealer.cards[WASTE_GROUP]
-        val wasteSize = waste.cards.size
+        val wasteSize = waste.cards.lastIndex
         // Should we take the cards from the waste and try some more
-        return(wasteSize > 1 && dealer.cards[STOCK_GROUP].cards.isEmpty() && stockPasses + 1 < stockPassCount).also {
+        return(wasteSize >= 0 && dealer.cards[STOCK_GROUP].cards.isEmpty() && stockPasses + 1 < stockPassCount).also {
             ++stockPasses
             state.bundle.putInt(STOCK_PASSES, stockPasses)
             state.onBundleUpdated()
             if (it) {
-                (2..<wasteSize).forEach {i ->
-                    waste.cards[i]?.card?.let { w -> w.changed(generation = generation, group = STOCK_GROUP, position = wasteSize - 1 - w.position, faceDown = true, spread = false) }
+                waste.cards.forEach {drawable ->
+                    drawable?.card?.let {
+                        w -> w.changed(generation = generation, group = STOCK_GROUP, position = wasteSize - w.position, faceDown = true, spread = false)
+                    }
                 }
-                waste.cards[1]?.card?.let { w -> w.changed(generation = generation, group = STOCK_GROUP, position = wasteSize - 1 - w.position, faceDown = false, spread = true) }
             }
         }
     }
@@ -588,7 +582,7 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
     private fun playCard(card: Card, group: Int, pos: Int, generation: Long) {
         card.changed(generation = generation, group = group,
             position = pos, highlight = Card.HIGHLIGHT_NONE, faceDown = false, spread = group == WASTE_GROUP)
-        if ((card.group == STOCK_GROUP || card.group == WASTE_GROUP) && dealer.cards[card.group].cards.size > 1) {
+        if (card.group == WASTE_GROUP && dealer.cards[card.group].cards.size > 1) {
             dealer.cards[card.group].let { it.cards[it.cards.lastIndex - 1]?.card?.changed(generation = generation,
                 highlight = Card.HIGHLIGHT_NONE, faceDown = false, spread = true) }
         }
@@ -603,6 +597,11 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
     override fun onClick(card: Card) {
         dealer.scope.launch {
             dealer.withUndo { generation ->
+                if (card.faceDown) {
+                    card.changed(generation = generation, faceDown = false, spread = true)
+                    return@withUndo
+                }
+
                 val match = card.findPlayable()
                 // Is this card playable
                 if (match != null) {
@@ -642,8 +641,10 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
             // the top card of the stock to the waste
             dealer.withUndo {generation ->
                 if (card.group == STOCK_GROUP) {
-                    dealer.cards[WASTE_GROUP].cards.lastOrNull()?.card?.changed(generation = generation, spread = false)
-                    playCard(card, WASTE_GROUP, dealer.cards[WASTE_GROUP].cards.size, generation = generation)
+                    if (card.faceUp) {
+                        dealer.cards[WASTE_GROUP].cards.lastOrNull()?.card?.changed(generation = generation, spread = false)
+                        playCard(card, WASTE_GROUP, dealer.cards[WASTE_GROUP].cards.size, generation = generation)
+                    }
                 } else if (card.group == WASTE_GROUP)
                     wasteToStock(generation)
             }
