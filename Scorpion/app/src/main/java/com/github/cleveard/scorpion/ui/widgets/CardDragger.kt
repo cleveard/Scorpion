@@ -4,6 +4,7 @@ import androidx.compose.ui.draganddrop.DragAndDropTarget
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 
 /**
@@ -44,7 +45,7 @@ interface DropCard {
      * hierarchy that previously received an [onStarted] event will receive this event. This gives
      * an opportunity to reset the state for a [DragAndDropTarget].
      */
-    fun onEnded(sourceDrawable: CardDrawable, targetDrawable: Any?) = Unit
+    fun onEnded(sourceDrawable: CardDrawable, targetDrawable: Any?, velocity: DpOffset) = Unit
 }
 
 /**
@@ -112,10 +113,11 @@ class CardDragger(private val drop: DropCard) {
     /**
      * Drag is finished
      */
-    fun end() {
+    fun Density.end(velocity: Velocity) {
         // Let the game know the drag ended and where the pointer was
         over?.let { drop.onExited(first!!, it) }
-        drop.onEnded(first!!, over)
+        val velocityDp = DpOffset(velocity.x.toDp(), velocity.y.toDp())
+        drop.onEnded(first!!, over, velocityDp)
     }
 
     /**
@@ -124,7 +126,7 @@ class CardDragger(private val drop: DropCard) {
     fun cancel() {
         over?.let { drop.onExited(first!!, it) }
         // Let the game know the drag ended without a drop
-        drop.onEnded(first!!, null)
+        drop.onEnded(first!!, null, DpOffset.Zero)
     }
 
     /**

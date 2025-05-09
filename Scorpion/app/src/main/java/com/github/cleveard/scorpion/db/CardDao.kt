@@ -49,6 +49,14 @@ data class Card(
     /** Flags */
     @ColumnInfo(name = CardDao.FLAGS) val flags: Int
 ) {
+    constructor(
+        value: Int,
+        group: Int,
+        position: Int,
+        highlight: Int,
+        faceDown: Boolean,
+        spread: Boolean
+    ): this(0L, value, group, position, calcFlags(highlight, faceDown, spread))
     /**
      * Primary key
      *

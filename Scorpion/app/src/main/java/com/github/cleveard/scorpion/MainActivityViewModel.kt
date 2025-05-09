@@ -2,7 +2,6 @@ package com.github.cleveard.scorpion
 
 import android.app.Application
 import android.content.Context
-import android.graphics.drawable.VectorDrawable
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -55,13 +54,13 @@ import coil3.Image
 import coil3.compose.AsyncImage
 import coil3.imageLoader
 import coil3.request.ImageRequest
-import com.github.cleveard.scorpion.db.CardDatabase
 import com.github.cleveard.scorpion.db.Card
+import com.github.cleveard.scorpion.db.CardDatabase
 import com.github.cleveard.scorpion.db.HighlightEntity
 import com.github.cleveard.scorpion.db.StateEntity
-import com.github.cleveard.scorpion.ui.games.Game
 import com.github.cleveard.scorpion.ui.Dealer
 import com.github.cleveard.scorpion.ui.DialogContent
+import com.github.cleveard.scorpion.ui.games.Game
 import com.github.cleveard.scorpion.ui.widgets.CardDrawable
 import com.github.cleveard.scorpion.ui.widgets.CardGroup
 import com.github.cleveard.scorpion.ui.widgets.TextRadioButton

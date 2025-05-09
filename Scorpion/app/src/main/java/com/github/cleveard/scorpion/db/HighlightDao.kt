@@ -37,8 +37,7 @@ abstract class HighlightDao {
     abstract suspend fun delete(list: List<Int>)
 
     /**
-     * Delete the highlights for a list of cards
-     * @param list The list of card values to delete
+     * Delete all cards from table
      */
     @Query("DELETE FROM $TABLE WHERE $CARD >= 0")
     abstract suspend fun clear()

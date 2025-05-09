@@ -3,7 +3,8 @@ package com.github.cleveard.scorpion.ui.widgets
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.draggable2D
+import androidx.compose.foundation.gestures.rememberDraggable2DState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.offset
@@ -18,8 +19,8 @@ import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntOffset
@@ -179,28 +180,28 @@ class CardGroup(val group: Int, val pass: Pass = Pass.Main) {
             )
         }
 
+        @OptIn(ExperimentalFoundationApi::class)
         @Composable
         fun Modifier.dragAndDropCard(drawable: CardDrawable, drop: DropCard): Modifier {
             val dragger = remember { CardDragger(drop) }
-            return pointerInput(drawable) {
-                detectDragGestures(
-                    onDragStart = {
+            return LocalDensity.current.run {
+                draggable2D(
+                    state = rememberDraggable2DState {
+                        with(dragger) {
+                            drag(it)
+                        }
+                    },
+                    onDragStarted = {
                         with(dragger) {
                             start(drawable, it)
                         }
                     },
-                    onDragEnd = {
-                        dragger.end()
-                    },
-                    onDragCancel = {
-                        dragger.cancel()
+                    onDragStopped = {
+                        with(dragger) {
+                            end(it)
+                        }
                     }
-                ) { change, dragAmount ->
-                    change.consume()
-                    with(dragger) {
-                        drag(dragAmount)
-                    }
-                }
+                )
             }
         }
     }

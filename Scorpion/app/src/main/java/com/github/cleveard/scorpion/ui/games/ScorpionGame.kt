@@ -77,6 +77,7 @@ import kotlinx.coroutines.launch
  *     The other cheat allows you to move a single card to the card one above it, even
  *     if it isn't at the bottom of a column. Kings are moved above the corresponding queen.
  */
+@Suppress("unused")
 class ScorpionGame(
     dealer: Dealer,
     state: StateEntity
@@ -734,7 +735,7 @@ class ScorpionGame(
                     color = Color(0)
                 }
 
-                override fun onEnded(sourceDrawable: CardDrawable, targetDrawable: Any?) {
+                override fun onEnded(sourceDrawable: CardDrawable, targetDrawable: Any?, velocity: DpOffset) {
                     endDrag()
                     scroller.autoScroll(0.0f)
                     targetDrawable?.let {
