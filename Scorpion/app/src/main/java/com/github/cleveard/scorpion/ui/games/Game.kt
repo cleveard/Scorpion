@@ -35,6 +35,17 @@ sealed class Game(
     private val _dragPass: MutableState<List<CardGroup>?> = mutableStateOf(null)
     private val dragPass: List<CardGroup>?
         get() = _dragPass.value
+    /** Flag to indicate the player cheated on the last play */
+    var cheated: Boolean = false
+    /** The number of times the player has cheated in this game */
+    var cheatCount: Int = state.bundle.getInt(CHEAT_COUNT, 0)
+        set(value) {
+            if (field != value) {
+                field = value
+                state.bundle.putInt(CHEAT_COUNT, value)
+                state.onBundleUpdated()
+            }
+        }
 
     /**
      * Get the asset path for the image of the front of a card
@@ -103,6 +114,11 @@ sealed class Game(
     abstract fun cardsUpdated()
 
     /**
+     * The user did something clear the cheat flags
+     */
+    abstract fun clearCheats()
+
+    /**
      * Start dragging cards
      * @param cardsToDrag The list of card groups to drag
      */
@@ -166,10 +182,40 @@ sealed class Game(
         }
     }
 
+    /**
+     * Add a card to the card changed list
+     * @param generation The new generation
+     * @param group The new group
+     * @param position The new position
+     * @param highlight The new highlight
+     * @param faceDown The new faceDown flag
+     * @param spread The new spread flag
+     */
+    protected fun Card.changed(
+        generation: Long = this.generation,
+        group: Int = this.group,
+        position: Int = this.position,
+        highlight: Int = this.highlight,
+        faceDown: Boolean = this.faceDown,
+        spread: Boolean = this.spread
+    ) {
+        // Add the card remember how many cards have changed
+        dealer.cardChanged(copy(
+            generation = generation,
+            group = group,
+            position = position,
+            highlight = highlight,
+            faceDown = faceDown,
+            spread = spread
+        ))
+    }
+
     companion object {
         const val CARDS_PER_SUIT: Int = 13
         @Suppress("MemberVisibilityCanBePrivate")
         const val SUIT_COUNT: Int = 4
         const val CARD_COUNT: Int = CARDS_PER_SUIT * SUIT_COUNT
+        /** Key for the cheat count */
+        const val CHEAT_COUNT: String = "cheat_count"
     }
 }

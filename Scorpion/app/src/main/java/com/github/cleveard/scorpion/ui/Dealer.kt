@@ -77,7 +77,7 @@ interface Dealer {
      * @return The number of cards changed since the last generation
      * The database is not updated until the final withUndo returns.
      */
-    fun cardChanged(card: Card): Int
+    fun cardChanged(card: Card)
 
     /**
      * Update the state for a game in the database

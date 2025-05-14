@@ -725,32 +725,7 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
     override fun onDoubleClick(card: Card) {
     }
 
-    /**
-     * Add a card to the card changed list
-     * @param generation The new generation
-     * @param group The new group
-     * @param position The new position
-     * @param highlight The new highlight
-     * @param faceDown The new faceDown flag
-     * @param spread The new spread flag
-     */
-    private fun Card.changed(
-        generation: Long = this.generation,
-        group: Int = this.group,
-        position: Int = this.position,
-        highlight: Int = this.highlight,
-        faceDown: Boolean = this.faceDown,
-        spread: Boolean = this.spread
-    ) {
-        // Add the card remember how many cards have changed
-        dealer.cardChanged(copy(
-            generation = generation,
-            group = group,
-            position = position,
-            highlight = highlight,
-            faceDown = faceDown,
-            spread = spread
-        ))
+    override fun clearCheats() {
     }
 
     @Composable

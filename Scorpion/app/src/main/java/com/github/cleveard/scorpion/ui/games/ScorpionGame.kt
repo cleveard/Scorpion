@@ -96,12 +96,6 @@ class ScorpionGame(
     private val padding: Dp = Dp(2.0f)
     /** Switch to show highlights for cards on below or above the selected card */
     private val showHighlights: MutableState<Boolean> = mutableStateOf(state.bundle.getBoolean(SHOW_HIGHLIGHTS, true))
-    /** The number of times the player has cheated in this game */
-    private var cheatCount: Int = state.bundle.getInt(CHEAT_COUNT, 0)
-    /** Flag to indicate the player cheated on the last play */
-    private var cheated: Boolean = false
-    /** The number of changed cards after the last card change request */
-    private var cardChangeCount: Int = 0
     /** Allow cheating by flipping a card illegally */
     private var cheatCardFlip: Boolean = false
     /** Allow cheating by moving a card illegally */
@@ -438,7 +432,7 @@ class ScorpionGame(
         // Update the database
         dealer.scope.launch {
             // Turn on undo
-            withUndo { generation ->
+            dealer.withUndo { generation ->
                 // is the card face down
                 if (card.faceDown) {
                     // Legally face down cards cn flip only if they are in the kitty
@@ -516,7 +510,7 @@ class ScorpionGame(
         dealer.scope.launch {
             // We need to run this in a coroutine because withUndo may
             // Update the database
-            withUndo {generation ->
+            dealer.withUndo {generation ->
                 // Try to move the card
                 checkAndMove(card, null, generation)
             }
@@ -622,34 +616,6 @@ class ScorpionGame(
         return null
     }
 
-    /**
-     * Add a card to the card changed list
-     * @param generation The new generation
-     * @param group The new group
-     * @param position The new position
-     * @param highlight The new highlight
-     * @param faceDown The new faceDown flag
-     * @param spread The new spread flag
-     */
-    private fun Card.changed(
-        generation: Long = this.generation,
-        group: Int = this.group,
-        position: Int = this.position,
-        highlight: Int = this.highlight,
-        faceDown: Boolean = this.faceDown,
-        spread: Boolean = this.spread
-    ) {
-        // Add the card remember how many cards have changed
-        cardChangeCount = dealer.cardChanged(copy(
-            generation = generation,
-            group = group,
-            position = position,
-            highlight = highlight,
-            faceDown = faceDown,
-            spread = spread
-        ))
-    }
-
     @Composable
     private fun Modifier.clickableCard(drawable: CardDrawable): Modifier {
         // Allow any card to be clicked
@@ -742,7 +708,7 @@ class ScorpionGame(
                         if (it is CardDrawable) {
                             if (sourceDrawable.card.canPlayOn(it.card)) {
                                 dealer.scope.launch {
-                                    withUndo { generation ->
+                                    dealer.withUndo { generation ->
                                         checkAndMove(sourceDrawable.card, it.card, generation)
                                     }
                                 }
@@ -750,7 +716,7 @@ class ScorpionGame(
                         } else if (it is CardGroup) {
                             if (sourceDrawable.card.canPlayOn(it.group)) {
                                 dealer.scope.launch {
-                                    withUndo { generation ->
+                                    dealer.withUndo { generation ->
                                         val moveAlone = sourceDrawable.card.group == KITTY_GROUP ||
                                             (kingMovesAlone && sourceDrawable.card.position < dealer.cards[sourceDrawable.card.group].cards.lastIndex &&
                                                 dealer.cards[sourceDrawable.card.group].cards[sourceDrawable.card.position + 1]!!.card.value != sourceDrawable.card.value - 1)
@@ -765,34 +731,11 @@ class ScorpionGame(
         }
     }
 
-    /**
-     * Extra processing of plays by the game
-     * @param actions The play to be made
-     * This method doesn't bother to check nesting, because the game
-     * doesn't nest undo.
-     */
-    private suspend fun <T> withUndo(actions: (generation: Long) -> T): T {
-        // Clear the cheated flag and cardChangeCount
-        cheated = false
-        cardChangeCount = 0
-        // Pass down to the dealer withUndo method
-        return dealer.withUndo {
-            // Run the actions
-            actions(it).also {
-                // When they are done, check to see if anything changed
-                if (cardChangeCount > 0) {
-                    // Yes, if we cheated, then update the cheat count
-                    if (cheated) {
-                        cheatCount += 1
-                        state.bundle.putInt(CHEAT_COUNT, cheatCount)
-                        state.onBundleUpdated()
-                    }
-                    // Something changed, so clear the cheat flags.
-                    cheatCardFlip = false
-                    cheatMoveCard = false
-                }
-            }
-        }
+    /** @inheritDoc */
+    override fun clearCheats() {
+        // Something changed, so clear the cheat flags.
+        cheatCardFlip = false
+        cheatMoveCard = false
     }
 
     /**
@@ -997,8 +940,6 @@ class ScorpionGame(
         // Keys for values kept in the state bundle
         /** Key for show highlight */
         private const val SHOW_HIGHLIGHTS: String = "show_highlights"
-        /** Key for the cheat count */
-        private const val CHEAT_COUNT: String = "cheat_count"
         /** Key for flag to move kitty cards when they are flipped */
         private const val MOVE_KITTY_WHEN_FLIPPED: String = "move_kitty_when_flipped"
         /** Key for the number of columns with face down cards */

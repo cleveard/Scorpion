@@ -192,6 +192,8 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
                     // Clear any highlights
                     highlightCards.clear()
                     CardDatabase.db.getHighlightDao().clear()
+                    game.cheatCount = 0
+                    CardDatabase.db.getStateDao().update(game.state.game, game.state.state)
                     // Set the current, minimum and maximum generations
                     generation.value = 0L
                     minGeneration.value = 0L
@@ -404,7 +406,7 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
     }
 
     /** @inheritDoc */
-    override fun cardChanged(card: Card): Int {
+    override fun cardChanged(card: Card) {
         // Did anything other than the highlight change
         val changed = drawables[card.value].card.let {
             it.group != card.group || it.position != card.position ||
@@ -418,7 +420,6 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
         val highlight = card.flags and Card.HIGHLIGHT_MASK
         if (highlight != Card.HIGHLIGHT_NONE)
             highlightCards[card.value] = HighlightEntity(card.value, highlight)
-        return changedCards.size
     }
 
     /** @inheritDoc */
@@ -569,6 +570,7 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
         if (undoNesting == 0) {
             previousHighlight.addAll(highlightCards.values)
             highlightCards.clear()
+            game.cheated = false
         }
         ++undoNesting       // Mark the nesting level
         return try {
@@ -627,6 +629,12 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
                                 CardDatabase.db.getCardDao().clearUndo(generation.value - 1)
                                 minGeneration.value = generation.value
                             }
+
+                            // Yes, if we cheated, then update the cheat count
+                            if (game.cheated)
+                                game.cheatCount += 1
+                            // Something changed, so clear the cheat flags.
+                            game.clearCheats()
                         }
 
                         // Delete old highlights from the database
@@ -913,6 +921,7 @@ class MainActivityViewModel(application: Application): AndroidViewModel(applicat
                                 game.cardsUpdated()
                                 // Add the highlights to the highlight list
                                 highlightCards.putAll(pair.second.map { it.card to it })
+                                game.cheatCount = state.bundle.getInt(Game.CHEAT_COUNT, 0)
                                 // Set the current, min and max generations
                                 generation.value = state.generation
                                 minGeneration.value = dbMinGeneration
