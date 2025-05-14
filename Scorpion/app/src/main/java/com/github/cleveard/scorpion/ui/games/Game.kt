@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.unit.Dp
+import com.github.cleveard.scorpion.R
 import com.github.cleveard.scorpion.db.Card
 import com.github.cleveard.scorpion.db.StateEntity
 import com.github.cleveard.scorpion.ui.Actions
@@ -208,6 +209,13 @@ sealed class Game(
             faceDown = faceDown,
             spread = spread
         ))
+    }
+
+    protected fun showGameWon() {
+        if (cheatCount == 0)
+            dealer.showNewGameOrDismissAlert(R.string.game_won, R.string.congratulations)   // No show the dialog
+        else
+            dealer.showNewGameOrDismissAlert(R.plurals.game_won, R.string.congratulations, cheatCount, cheatCount) // Yes the dialog with cheat count
     }
 
     companion object {

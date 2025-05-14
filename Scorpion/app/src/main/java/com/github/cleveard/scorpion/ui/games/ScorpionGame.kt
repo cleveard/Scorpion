@@ -305,11 +305,6 @@ class ScorpionGame(
             list.add(Card(0L, card, KITTY_GROUP, position++, Card.calcFlags(faceDown = true)))
         }
 
-        // Clear the cheat count and update the database
-        cheatCount = 0
-        state.bundle.putInt(CHEAT_COUNT, cheatCount)
-        dealer.onStateChanged(state)
-
         // Return the list
         return list
     }
@@ -587,10 +582,7 @@ class ScorpionGame(
             // Did we win
             if (won) {
                 // We won !!. Did we cheat
-                if (cheatCount == 0)
-                    dealer.showNewGameOrDismissAlert(R.string.game_won, R.string.congratulations)   // No show the dialog
-                else
-                    dealer.showNewGameOrDismissAlert(R.plurals.game_won, R.string.congratulations, cheatCount, cheatCount) // Yes the dialog with cheat count
+                showGameWon()
             } else {
                 // A card is not in the right group or position. We lost.
                 // Show the no more moves dialog and return

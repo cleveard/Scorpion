@@ -27,9 +27,12 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.TextUnitType
 import androidx.compose.ui.unit.coerceAtLeast
 import androidx.compose.ui.unit.coerceAtMost
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.github.cleveard.scorpion.R
 import com.github.cleveard.scorpion.db.Card
 import com.github.cleveard.scorpion.db.StateEntity
@@ -58,6 +61,7 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
     private var playPartialCover: Boolean = state.bundle.getBoolean(PLAY_PARTIAL_COVER, true)
     private var playFromStock: Boolean = state.bundle.getBoolean(PLAY_FROM_STOCK, true)
     private var showHighlights: MutableState<Boolean> = mutableStateOf(state.bundle.getBoolean(SHOW_HIGHLIGHTS, true))
+    private var cheatPlayOnCovered: Boolean = false
     private var cardSize: DpSize = DpSize.Zero
     private var traySize: DpSize = DpSize.Zero
 
@@ -158,6 +162,7 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
     private val settingsContent = object: DialogContent {
         /** Current value of showHighlights */
         var showHints = false
+        var cheatCovered = false
 
         /** @inheritDoc */
         @Composable
@@ -169,6 +174,13 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
                 R.string.show_highlights,
                 onChange = { showHints = it }
             )
+            // Add checkbox for cheatCardFlip
+            HorizontalDivider(Modifier.padding(top = 4.dp))
+            TextSwitch(
+                cheatCovered,
+                R.string.cheat_play_on_covered,
+                onChange = { cheatCovered = it }
+            )
         }
 
         /** @inheritDoc */
@@ -177,6 +189,8 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
 
         /** @inheritDoc */
         override suspend fun onAccept() {
+            cheatPlayOnCovered = cheatCovered
+
             // Update showHighlights in the bundle
             var update = false
             update = (showHints != showHighlights.value).also {
@@ -195,6 +209,7 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
         override fun reset() {
             // Reset the current values to the values from the game
             showHints = showHighlights.value
+            cheatCovered = cheatPlayOnCovered
         }
     }
 
@@ -395,12 +410,14 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
                         }
                     }
                 },
+                contentPadding = PaddingValues(0.dp),
                 modifier = Modifier.bumpGradientBackground(Color(207, 181, 59, 255))
                     .align(Alignment.Center)
                     .width(cardSize.width * 0.9f)
             ) {
                 Text(
-                    text = stringResource(R.string.deal)
+                    text = stringResource(R.string.deal),
+                    fontSize = 16.sp
                 )
             }
         }
@@ -511,12 +528,8 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
                 return true         // Both cards are playable
         } else if (!matchPlayable)
             return false           // Neither card is playable
-        if (!playPartialCover)
+        if (!playPartialCover && !cheatPlayOnCovered)
             return false           // Don't allow partial covers
-        else if (group == WASTE_GROUP && card.group == WASTE_GROUP)
-            return true
-        else if (group >= ROW_COUNT || card.group >= ROW_COUNT)
-            return false           // Partial cover only works if both cards are in the pyramid
 
         // One of the cards is playable, one isn't; note which is which
         val playCard: Card
@@ -532,10 +545,18 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
         // These two cards can be played only if the playCard
         // is the only card that covers the notPlayCard
         // First is the playCard in the group below the notPlayCard
-        return playCard.partialCover(notPlayCard)
+        return playCard.partialCover(notPlayCard) || cheatPlayOnCovered.also {
+            if (it)
+                cheated = true
+        }
     }
 
     private fun Card.partialCover(covered: Card): Boolean {
+        if (group == WASTE_GROUP && covered.group == WASTE_GROUP)
+            return true
+        else if (group >= ROW_COUNT || covered.group >= ROW_COUNT)
+            return false
+        // Partial cover only works if both cards are in the pyramid
         // These two cards can be played only if the playCard
         // is the only card that covers the notPlayCard
         // First is the playCard in the group below the notPlayCard
@@ -570,8 +591,8 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
 
         // If clearing the pyramid is a win and it is clear, then let the user know
         // This relies on the dealer to empty groups with no cards in them
-        if (dealer.cards[0].cards.isEmpty() && clearPyramidOnly) {
-            dealer.showNewGameOrDismissAlert(R.string.game_won, R.string.congratulations)
+        if (dealer.cards.all { it.cards.isEmpty() } && clearPyramidOnly) {
+            showGameWon()
             return
         }
 
@@ -618,7 +639,7 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
         // The game is over, did we win
         if (dealer.cards[DISCARD_GROUP].cards.size == CARD_COUNT) {
             // Yes, let the user know
-            dealer.showNewGameOrDismissAlert(R.string.game_won, R.string.congratulations)
+            showGameWon()
         } else {
             // No, let the user know
             dealer.showNewGameOrDismissAlert(R.string.no_moves, R.string.game_over)
@@ -723,9 +744,23 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
     }
 
     override fun onDoubleClick(card: Card) {
+        dealer.scope.launch {
+            // The only thing double click does is move
+            // the top card of the stock to the waste
+            dealer.withUndo {generation ->
+                if (card.group == STOCK_GROUP) {
+                    if (card.faceUp) {
+                        dealer.cards[WASTE_GROUP].cards.lastOrNull()?.card?.changed(generation = generation, spread = false)
+                        playCard(card, WASTE_GROUP, dealer.cards[WASTE_GROUP].cards.size, generation = generation)
+                    }
+                } else if (card.group == WASTE_GROUP)
+                    wasteToStock(generation)
+            }
+        }
     }
 
     override fun clearCheats() {
+        cheatPlayOnCovered = false
     }
 
     @Composable
@@ -819,45 +854,37 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
 
                 override fun onEnded(sourceDrawable: CardDrawable, targetDrawable: Any?, velocity: DpOffset) {
                     endDrag()
-                    if (targetDrawable is CardDrawable) {
-                        val count = dropCardCount(sourceDrawable, targetDrawable)
-                        if (count > 0) {
-                            dealer.scope.launch {
-                                dealer.withUndo { generation ->
+                    dealer.scope.launch {
+                        dealer.withUndo { generation ->
+                            if (targetDrawable is CardDrawable) {
+                                val count = dropCardCount(sourceDrawable, targetDrawable)
+                                if (count > 0) {
                                     playCard(sourceDrawable.card, DISCARD_GROUP, dealer.cards[DISCARD_GROUP].cards.size, generation)
                                     if (count > 1)
                                         playCard(targetDrawable.card, DISCARD_GROUP, dealer.cards[DISCARD_GROUP].cards.size + 1, generation)
+                                    return@withUndo
                                 }
-                            }
-                            return
-                        }
-                    } else if (targetDrawable is CardGroup) {
-                        val count = dropCardCount(sourceDrawable, targetDrawable)
-                        if (count > 0) {
-                            dealer.scope.launch {
-                                dealer.withUndo { generation ->
+                            } else if (targetDrawable is CardGroup) {
+                                val count = dropCardCount(sourceDrawable, targetDrawable)
+                                if (count > 0) {
                                     playCard(sourceDrawable.card, DISCARD_GROUP, dealer.cards[DISCARD_GROUP].cards.size, generation)
+                                    return@withUndo
                                 }
                             }
-                            return
-                        }
-                    }
 
-                    if (sourceDrawable.card.group == STOCK_GROUP) {
-                        // Check for a fling of a stock card to the waste
-                        val vX = velocity.x.value
-                        val vY = velocity.y.value
-                        val vMagnitude = sqrt(vX * vX + vY * vY)
-                        // Minimum speed to accept the fling
-                        if (vMagnitude >= 15) {
-                            val dX = cards[WASTE_GROUP].offset.x.value - cards[STOCK_GROUP].offset.x.value
-                            val dY = cards[WASTE_GROUP].offset.y.value - cards[STOCK_GROUP].offset.y.value
-                            val dMagnitude = sqrt(dX * dX + dY * dY)
-                            val cosine = (vX * dX + vY * dY) / (vMagnitude * dMagnitude)
-                            if (cosine >= 0.8) {
-                                // Move the card to the waste pile
-                                dealer.scope.launch {
-                                    dealer.withUndo { generation ->
+                            if (sourceDrawable.card.group == STOCK_GROUP) {
+                                // Check for a fling of a stock card to the waste
+                                val vX = velocity.x.value
+                                val vY = velocity.y.value
+                                val vMagnitude = sqrt(vX * vX + vY * vY)
+                                // Minimum speed to accept the fling
+                                if (vMagnitude >= 15) {
+                                    val dX = cards[WASTE_GROUP].offset.x.value - cards[STOCK_GROUP].offset.x.value
+                                    val dY = cards[WASTE_GROUP].offset.y.value - cards[STOCK_GROUP].offset.y.value
+                                    val dMagnitude = sqrt(dX * dX + dY * dY)
+                                    val cosine = (vX * dX + vY * dY) / (vMagnitude * dMagnitude)
+                                    if (cosine >= 0.8) {
+                                        // Move the card to the waste pile
                                         dealer.cards[WASTE_GROUP].cards.lastOrNull()?.card?.changed(generation = generation, spread = false)
                                         playCard(sourceDrawable.card, WASTE_GROUP, dealer.cards[WASTE_GROUP].cards.size, generation = generation)
                                     }
