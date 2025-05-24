@@ -227,3 +227,39 @@ sealed class Game(
         const val CHEAT_COUNT: String = "cheat_count"
     }
 }
+
+/**
+ * Class used to track cheating with a value
+ * This class is used keep the cheating state with a value.
+ * Games can use it when they want to return a value and
+ * indicate the the player cheated to make the value.
+ */
+sealed class Cheating<T>(val value: T) {
+    /** Class when the player cheated */
+    class Cheated<T>(value: T): Cheating<T>(value) {
+        override fun <R> transform(xform: (T) -> R): Cheating<R> = Cheated(xform(value))
+        context(Game)
+        override fun setCheated(): T = value.also {
+            cheated = true
+        }
+    }
+    /** Class when the player didn't cheat */
+    class DidNotCheat<T>(value: T): Cheating<T>(value) {
+        override fun <R> transform(xform: (T) -> R): Cheating<R> = DidNotCheat(xform(value))
+        context(Game)
+        override fun setCheated(): T = value
+    }
+
+    /**
+     * Transform a cheat class
+     * Transform the value of the cheating object keeping the type
+     * @param xform Lambda to transform the cheating value
+     */
+    abstract fun <R> transform(xform: (T) -> R): Cheating<R>
+
+    /**
+     * Set cheated flag and return the value
+     */
+    context(Game)
+    abstract fun setCheated(): T
+}

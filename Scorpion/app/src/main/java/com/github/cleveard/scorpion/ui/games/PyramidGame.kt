@@ -27,8 +27,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.DpSize
-import androidx.compose.ui.unit.TextUnit
-import androidx.compose.ui.unit.TextUnitType
 import androidx.compose.ui.unit.coerceAtLeast
 import androidx.compose.ui.unit.coerceAtMost
 import androidx.compose.ui.unit.dp
@@ -496,15 +494,17 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
      * Find the card that plays with this
      * @return The match card or null if not found. Kings return themselves
      */
-    private fun Card.findPlayable(): Card? {
+    private fun Card.findPlayable(): Cheating<Card?> {
         // Get the value of the card
         val cardValue = value % CARDS_PER_SUIT
         // If it is a king then match itself
         if (cardValue == CARDS_PER_SUIT - 1) {
-            return if (playable() != null)
-                this
-            else
-                null
+            return Cheating.DidNotCheat(
+                if (playable() != null)
+                    this
+                else
+                    null
+            )
         }
 
         val match = processMatches {
@@ -512,24 +512,26 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
         }
 
         // No matches with this sum to 13
-        return match?.let {
-            if (playable(it))
-                it
-            else
-                null
-        }
+        return match?.let { card ->
+            playable(card).transform {
+                if (it)
+                    card
+                else
+                    null
+            }
+        }?: Cheating.DidNotCheat(null)
     }
 
-    private fun Card.playable(card: Card): Boolean {
+    private fun Card.playable(card: Card): Cheating<Boolean> {
         // Check whether either or both cards are playable
         val matchPlayable = card.playable() != null
         if (playable() != null) {
             if (matchPlayable)
-                return true         // Both cards are playable
+                return Cheating.DidNotCheat(true)         // Both cards are playable
         } else if (!matchPlayable)
-            return false           // Neither card is playable
+            return Cheating.DidNotCheat(false)           // Neither card is playable
         if (!playPartialCover && !cheatPlayOnCovered)
-            return false           // Don't allow partial covers
+            return Cheating.DidNotCheat(false)           // Don't allow partial covers
 
         // One of the cards is playable, one isn't; note which is which
         val playCard: Card
@@ -545,9 +547,11 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
         // These two cards can be played only if the playCard
         // is the only card that covers the notPlayCard
         // First is the playCard in the group below the notPlayCard
-        return playCard.partialCover(notPlayCard) || cheatPlayOnCovered.also {
-            if (it)
-                cheated = true
+        return (playPartialCover && playCard.partialCover(notPlayCard)).let {
+            if (it || !cheatPlayOnCovered)
+                Cheating.DidNotCheat(it)
+            else
+                Cheating.Cheated(true)
         }
     }
 
@@ -710,19 +714,17 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
                     return@withUndo
                 }
 
-                val match = card.findPlayable()
-                // Is this card playable
-                if (match != null) {
+                card.findPlayable().setCheated()?.let {
                     // Keep track of position for played cards
                     var pos = dealer.cards[DISCARD_GROUP].cards.size
                     // Is the card a king
-                    if (match == card) {
+                    if (it == card) {
                         // This is a king, just play it
                         playCard(card, DISCARD_GROUP, pos, generation)
                         return@withUndo
                     } else {
                         // We have a card and a match, so play them
-                        playCard(match, DISCARD_GROUP, pos++, generation)
+                        playCard(it, DISCARD_GROUP, pos++, generation)
                         playCard(card, DISCARD_GROUP, pos, generation)
                         return@withUndo
                     }
@@ -782,13 +784,18 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
         }
     }
 
-    private fun dropCardCount(drag: CardDrawable, drop: CardDrawable): Int {
+    private fun dropCardCount(drag: CardDrawable, drop: CardDrawable): Cheating<Int> {
         return if (drag.card.value % CARDS_PER_SUIT == CARDS_PER_SUIT - 1 && drag.card.playable() != null && drop.card.group == DISCARD_GROUP)
-            1
-        else if ((drag.card.value + drop.card.value) % CARDS_PER_SUIT == CARDS_PER_SUIT - 2 && drag.card.playable(drop.card))
-            2
+            Cheating.DidNotCheat(1)
+        else if ((drag.card.value + drop.card.value) % CARDS_PER_SUIT == CARDS_PER_SUIT - 2)
+            drag.card.playable(drop.card).transform {
+                if (it)
+                    2
+                else
+                    0
+            }
         else
-            0
+            Cheating.DidNotCheat(0)
     }
 
     private fun dropCardCount(drag: CardDrawable, drop: CardGroup): Int {
@@ -830,7 +837,7 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
                 override fun onEntered(sourceDrawable: CardDrawable, targetDrawable: Any): Boolean {
                     if (targetDrawable is CardDrawable) {
                         filter = targetDrawable.colorFilter
-                        if (dropCardCount(sourceDrawable, targetDrawable) > 0)
+                        if (dropCardCount(sourceDrawable, targetDrawable).value > 0)
                             targetDrawable.colorFilter = dropFilter
                         return false
                     } else if (targetDrawable is CardGroup) {
@@ -857,7 +864,7 @@ class PyramidGame(dealer: Dealer, state: StateEntity): Game(
                     dealer.scope.launch {
                         dealer.withUndo { generation ->
                             if (targetDrawable is CardDrawable) {
-                                val count = dropCardCount(sourceDrawable, targetDrawable)
+                                val count = dropCardCount(sourceDrawable, targetDrawable).setCheated()
                                 if (count > 0) {
                                     playCard(sourceDrawable.card, DISCARD_GROUP, dealer.cards[DISCARD_GROUP].cards.size, generation)
                                     if (count > 1)
